@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>삼국지 디펜스 - 유비전</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="wrap">
+  <!-- HUD -->
+  <div id="hud" style="display:none">
+    <div class="hud-group">
+      <span class="hud-item">💰 <b id="hud-gold">0</b></span>
+      <span class="hud-item">❤️ <b id="hud-lives">20</b></span>
+      <span class="hud-item">🌊 <b id="hud-wave">1/5</b></span>
+    </div>
+    <div class="hud-title" id="hud-stage"></div>
+    <div class="hud-group">
+      <button class="hud-btn" id="btn-speed">▶ x1</button>
+      <button class="hud-btn" id="btn-pause">⏸ 정지</button>
+      <button class="hud-btn" id="btn-quit">🏳️ 포기</button>
+    </div>
+  </div>
+
+  <canvas id="game" width="960" height="600"></canvas>
+
+  <!-- 필살기 버튼 -->
+  <button id="btn-ult" style="display:none" title="필살기 (Q 또는 스페이스)">
+    <span id="ult-icon">⚡</span>
+    <span id="ult-cd"></span>
+  </button>
+
+  <!-- 건설 메뉴 -->
+  <div id="build-menu" style="display:none"></div>
+
+  <!-- 타이틀 -->
+  <div class="overlay active" id="title">
+    <div class="panel title-panel">
+      <h1>三國志</h1>
+      <h2>삼국지 디펜스 · 유비전</h2>
+      <p class="title-desc">
+        도원결의에서 한중왕까지 — 유비와 함께하는 10대 전투.<br>
+        궁병·창병·투석기·화공으로 진을 치고, 영웅의 필살기로 전세를 뒤집어라!
+      </p>
+      <button class="big-btn" id="btn-start">출전!</button>
+      <p class="title-hint">영웅 클릭 후 지도 클릭 = 이동 · Q/스페이스 = 필살기</p>
+    </div>
+  </div>
+
+  <!-- 스테이지 지도 -->
+  <div class="overlay" id="stage-map">
+    <div class="panel map-panel">
+      <h2>전장 지도</h2>
+      <div id="stage-list"></div>
+    </div>
+  </div>
+
+  <!-- 시나리오 다이얼로그 -->
+  <div class="overlay" id="dialogue">
+    <div class="dlg-box">
+      <div id="dlg-portrait">👑</div>
+      <div class="dlg-content">
+        <div id="dlg-speaker">유비</div>
+        <div id="dlg-text"></div>
+        <div class="dlg-footer"><span id="dlg-progress"></span> · 클릭하여 계속 ▸</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 영웅 선택 -->
+  <div class="overlay" id="hero-select">
+    <div class="panel">
+      <h2>출전할 영웅을 선택하라</h2>
+      <div id="hero-list"></div>
+      <button class="small-btn" id="btn-hero-back">← 지도로</button>
+    </div>
+  </div>
+
+  <!-- 결과 -->
+  <div class="overlay" id="result">
+    <div class="panel result-panel">
+      <h2 id="result-title">승리!</h2>
+      <div id="result-stars">⭐⭐⭐</div>
+      <p id="result-msg"></p>
+      <div class="result-btns">
+        <button class="big-btn" id="btn-result-next">다음 전투 ▸</button>
+        <button class="small-btn" id="btn-result-retry">재도전</button>
+        <button class="small-btn" id="btn-result-map">지도로</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

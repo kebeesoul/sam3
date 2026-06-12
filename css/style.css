@@ -1,0 +1,283 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #1a1410;
+  color: #f0e6d2;
+  font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#wrap {
+  position: relative;
+  width: min(96vw, 960px);
+}
+
+canvas#game {
+  display: block;
+  width: 100%;
+  aspect-ratio: 960 / 600;
+  border: 3px solid #5a4628;
+  border-radius: 8px;
+  background: #333;
+  cursor: pointer;
+}
+
+/* ---------------- HUD ---------------- */
+#hud {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 4px;
+  gap: 8px;
+}
+.hud-group { display: flex; gap: 8px; align-items: center; }
+.hud-item {
+  background: rgba(90, 70, 40, 0.5);
+  border: 1px solid #5a4628;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 14px;
+}
+.hud-title { font-weight: bold; font-size: 16px; color: #ffd700; }
+.hud-btn {
+  background: #3a2e1e;
+  color: #f0e6d2;
+  border: 1px solid #6a5638;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.hud-btn:hover { background: #524228; }
+
+/* ---------------- 필살기 버튼 ---------------- */
+#btn-ult {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 3px solid #555;
+  background: radial-gradient(#3a3a3a, #1c1c1c);
+  color: #999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  z-index: 5;
+  transition: transform 0.1s;
+}
+#btn-ult #ult-icon { font-size: 26px; }
+#btn-ult.ready {
+  border-color: #ffd700;
+  background: radial-gradient(#7a5b15, #3a2c08);
+  color: #ffe9a8;
+  box-shadow: 0 0 16px rgba(255, 215, 0, 0.6);
+  animation: pulse 1.2s infinite;
+}
+#btn-ult:active { transform: scale(0.93); }
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(255,215,0,0.4); }
+  50% { box-shadow: 0 0 22px rgba(255,215,0,0.85); }
+}
+
+/* ---------------- 건설 메뉴 ---------------- */
+#build-menu {
+  position: fixed;
+  background: rgba(26, 20, 16, 0.96);
+  border: 2px solid #8a6d4a;
+  border-radius: 10px;
+  padding: 8px;
+  z-index: 20;
+  width: 190px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.7);
+}
+.bm-title {
+  text-align: center;
+  font-weight: bold;
+  font-size: 13px;
+  color: #ffd700;
+  margin-bottom: 6px;
+}
+.bm-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: #3a2e1e;
+  border: 1px solid #6a5638;
+  border-radius: 6px;
+  color: #f0e6d2;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.bm-btn:hover { background: #524228; }
+.bm-btn.disabled { opacity: 0.45; cursor: not-allowed; }
+.bm-btn.sell { border-color: #8a4a4a; }
+.bm-icon { font-size: 16px; }
+.bm-name { flex: 1; text-align: left; }
+.bm-cost { color: #ffd700; font-size: 12px; }
+
+/* ---------------- 오버레이 / 패널 ---------------- */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 8, 5, 0.82);
+  z-index: 30;
+  border-radius: 8px;
+}
+.overlay.active { display: flex; }
+
+.panel {
+  background: linear-gradient(#2c2218, #1c1610);
+  border: 3px solid #8a6d4a;
+  border-radius: 14px;
+  padding: 26px 32px;
+  text-align: center;
+  max-width: 88%;
+  max-height: 92%;
+  overflow-y: auto;
+}
+.panel h2 { color: #ffd700; margin-bottom: 14px; }
+
+.title-panel h1 {
+  font-size: 64px;
+  color: #ffd700;
+  text-shadow: 0 0 24px rgba(255, 160, 60, 0.5);
+  font-family: serif;
+}
+.title-panel h2 { font-size: 22px; margin: 6px 0 16px; }
+.title-desc { font-size: 14px; line-height: 1.7; color: #d8c8a8; margin-bottom: 20px; }
+.title-hint { font-size: 12px; color: #998866; margin-top: 14px; }
+
+.big-btn {
+  background: linear-gradient(#c0392b, #8e2418);
+  color: #fff;
+  border: 2px solid #e74c3c;
+  border-radius: 10px;
+  font-size: 20px;
+  font-weight: bold;
+  padding: 12px 44px;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.big-btn:hover { transform: scale(1.05); }
+.small-btn {
+  background: #3a2e1e;
+  color: #f0e6d2;
+  border: 1px solid #6a5638;
+  border-radius: 8px;
+  font-size: 14px;
+  padding: 8px 18px;
+  cursor: pointer;
+  margin-top: 12px;
+}
+.small-btn:hover { background: #524228; }
+
+/* ---------------- 스테이지 지도 ---------------- */
+.map-panel { width: 560px; }
+#stage-list { display: flex; flex-direction: column; gap: 8px; }
+.stage-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #3a2e1e;
+  border: 2px solid #6a5638;
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.1s, border-color 0.1s;
+}
+.stage-card:hover:not(.locked) { transform: translateX(6px); border-color: #ffd700; }
+.stage-card.locked { opacity: 0.45; cursor: not-allowed; }
+.stage-card.next { border-color: #e74c3c; box-shadow: 0 0 10px rgba(231, 76, 60, 0.4); }
+.sc-num {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: #8a6d4a;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: bold; font-size: 16px;
+  flex-shrink: 0;
+}
+.sc-body { flex: 1; }
+.sc-name { font-weight: bold; font-size: 16px; }
+.sc-sub { font-size: 12px; color: #b8a888; }
+.sc-stars { font-size: 14px; }
+
+/* ---------------- 다이얼로그 ---------------- */
+#dialogue { align-items: flex-end; cursor: pointer; }
+.dlg-box {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  background: linear-gradient(#2c2218, #1c1610);
+  border: 3px solid #8a6d4a;
+  border-radius: 14px 14px 0 0;
+  border-bottom: none;
+  padding: 18px 26px;
+  width: 92%;
+  min-height: 130px;
+}
+#dlg-portrait {
+  font-size: 56px;
+  width: 84px; height: 84px;
+  background: #3a2e1e;
+  border: 2px solid #8a6d4a;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.dlg-content { flex: 1; text-align: left; }
+#dlg-speaker { color: #ffd700; font-weight: bold; font-size: 17px; margin-bottom: 6px; }
+#dlg-text { font-size: 15px; line-height: 1.65; min-height: 50px; }
+.dlg-footer { font-size: 11px; color: #998866; text-align: right; margin-top: 6px; }
+
+/* ---------------- 영웅 선택 ---------------- */
+#hero-list {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.hero-card {
+  width: 150px;
+  background: #3a2e1e;
+  border: 2px solid #6a5638;
+  border-radius: 12px;
+  padding: 12px 8px;
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.1s;
+}
+.hero-card:hover:not(.locked) { transform: translateY(-5px); border-color: #ffd700; }
+.hero-card.locked { opacity: 0.45; cursor: not-allowed; }
+.hc-icon {
+  font-size: 38px;
+  width: 64px; height: 64px;
+  margin: 0 auto 8px;
+  border: 3px solid #888;
+  border-radius: 50%;
+  background: #241c12;
+  display: flex; align-items: center; justify-content: center;
+}
+.hc-name { font-weight: bold; font-size: 16px; }
+.hc-title { font-size: 11px; color: #b8a888; margin-bottom: 6px; }
+.hc-ult { font-size: 12px; color: #ffd700; margin-bottom: 4px; }
+.hc-desc { font-size: 11px; color: #a89878; line-height: 1.4; min-height: 44px; }
+
+/* ---------------- 결과 ---------------- */
+.result-panel { min-width: 380px; }
+#result-stars { font-size: 40px; margin: 10px 0; }
+#result-msg { font-size: 14px; line-height: 1.6; color: #d8c8a8; margin-bottom: 16px; }
+.result-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; align-items: center; }
