@@ -750,24 +750,25 @@ const Sprites = (() => {
     // 명암 그라데이션 + 일정 간격 계단 밴드를 깐다
     if (map.hills && hillEdges.length) {
       for (const { hl } of hillEdges) {
-        let stepTick = 0;
+        let stepTick = 0, run = 0;
         for (let i = 1; i < pathPts.length - 1; i++) {
           const p = pathPts[i];
           const nd = Math.hypot((p.x - hl.x) / hl.rx, (p.y - hl.y) / hl.ry);
-          if (nd < 0.9 || nd > 1.38) { stepTick = 0; continue; }
-          const t = 1 - Math.min(1, Math.abs(nd - 1.1) / 0.32); // 비탈 중심에서 강함
+          if (nd < 0.93 || nd > 1.28) { stepTick = 0; run = 0; continue; }
+          if (++run > 13) continue; // 림 교차부 주변에만 (능선을 '넘는' 구간)
+          const t = 1 - Math.min(1, Math.abs(nd - 1.1) / 0.24); // 비탈 중심에서 강함
           const q = pathPts[Math.min(i + 1, pathPts.length - 1)];
           const ang = Math.atan2(q.y - p.y, q.x - p.x);
           g.save();
           g.translate(p.x, p.y);
           g.rotate(ang);
           // 비탈 음영: 내리막쪽이 어두워지는 띠
-          g.fillStyle = `rgba(35,26,10,${0.10 * t})`;
+          g.fillStyle = `rgba(35,26,10,${0.07 * t})`;
           g.fillRect(-9, -21, 18, 42);
           // 계단 밴드 (일정 간격)
           stepTick++;
-          if (stepTick % 2 === 0) {
-            g.strokeStyle = `rgba(70,50,22,${0.5 * t})`;
+          if (stepTick % 3 === 0) {
+            g.strokeStyle = `rgba(70,50,22,${0.42 * t})`;
             g.lineWidth = 3;
             g.beginPath(); g.moveTo(0, -19); g.lineTo(0, 19); g.stroke();
             g.strokeStyle = `rgba(238,218,172,${0.45 * t})`;

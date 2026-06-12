@@ -173,8 +173,9 @@ const STAGES = [
     lives: 20, gold: 240,
     map: {
       ranges: [
-        { along: [[200, 60], [780, 64]], n: 2, h: 165, kind: 'deco_range_snow' },
-        { along: [[200, 588], [760, 592]], n: 2, h: 150, kind: 'deco_range_rock' },
+        { along: [[200, 118], [780, 122]], n: 2, h: 115, kind: 'deco_range_snow' },
+        { along: [[150, 592], [150, 592]], n: 1, h: 130, kind: 'deco_range_rock' },
+        { along: [[400, 596], [500, 600]], n: 2, h: 100, kind: ['deco_peak2', 'deco_mountain'] },
       ],
       hills: [{ x: 250, y: 470, rx: 195, ry: 105 }, { x: 700, y: 200, rx: 205, ry: 110 }],
       forests: [{ x: 80, y: 470, r: 60, n: 4, kind: 'deco_pine' }],
@@ -397,7 +398,7 @@ const STAGES = [
     map: {
       ranges: [
         { along: [[46, 90], [40, 540]], n: 5, h: 150, kind: ['deco_mountain', 'deco_peak2'] },
-        { along: [[260, 58], [840, 62]], n: 2, h: 155, kind: 'deco_range_rock' },
+        { along: [[730, 162], [900, 168]], n: 2, h: 122, kind: 'deco_range_rock' },
       ],
       hills: [{ x: 350, y: 300, rx: 200, ry: 110 }, { x: 800, y: 440, rx: 165, ry: 95 }],
       forests: [{ x: 930, y: 600, r: 70, n: 5, kind: 'deco_pine' }],
@@ -433,7 +434,7 @@ const STAGES = [
     lives: 20, gold: 460,
     map: {
       ranges: [
-        { along: [[230, 56], [760, 50]], n: 2, h: 178, kind: 'deco_range_snow' },
+        { along: [[400, 158], [800, 152]], n: 2, h: 132, kind: 'deco_range_snow' },
         { along: [[934, 150], [924, 560]], n: 5, h: 140, kind: ['deco_peak2', 'deco_mountain'] },
       ],
       hills: [{ x: 270, y: 220, rx: 215, ry: 120 }, { x: 560, y: 430, rx: 230, ry: 120 }, { x: 800, y: 180, rx: 140, ry: 85 }],
