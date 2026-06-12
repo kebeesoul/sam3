@@ -401,7 +401,7 @@ const Sprites = (() => {
   function texturesReadyKey() {
     let k = '';
     for (const n of ['tex_grass', 'tex_dirt', 'tex_water']) k += TerrainTex.ready(n) ? '1' : '0';
-    for (const n of ['deco_pine', 'deco_tree', 'deco_bamboo', 'deco_rock', 'deco_hut', 'deco_mountain', 'deco_bush', 'deco_gate', 'deco_fortress']) {
+    for (const n of ['deco_pine', 'deco_tree', 'deco_bamboo', 'deco_rock', 'deco_hut', 'deco_mountain', 'deco_bush', 'deco_gate', 'deco_fortress', 'deco_ship']) {
       k += (typeof SpriteImages !== 'undefined' && SpriteImages.variant(n, null)) ? '1' : '0';
     }
     return k;
@@ -416,14 +416,19 @@ const Sprites = (() => {
     g.stroke();
   }
 
-  function drawDecoSprite(g, name, x, y, h, flip) {
+  function drawDecoSprite(g, name, x, y, h, flip, noShadow) {
     const img = SpriteImages.variant(name, null);
     if (!img) return false;
     const sc = h / img.height;
     const w = img.width * sc;
-    // 그림자
-    g.fillStyle = 'rgba(20,30,10,0.28)';
-    g.beginPath(); g.ellipse(x, y + 2, w * 0.34, w * 0.13, 0, 0, Math.PI * 2); g.fill();
+    if (noShadow) {
+      // 수면 위: 어두운 반영
+      g.fillStyle = 'rgba(10,24,40,0.3)';
+      g.beginPath(); g.ellipse(x, y + 3, w * 0.4, w * 0.1, 0, 0, Math.PI * 2); g.fill();
+    } else {
+      g.fillStyle = 'rgba(20,30,10,0.28)';
+      g.beginPath(); g.ellipse(x, y + 2, w * 0.34, w * 0.13, 0, 0, Math.PI * 2); g.fill();
+    }
     g.save();
     g.translate(x, y);
     if (flip) g.scale(-1, 1);
@@ -431,6 +436,88 @@ const Sprites = (() => {
     g.drawImage(img, -w / 2, -h, w, h);
     g.restore();
     return true;
+  }
+
+  /* 장판교: 나무 다리 (수평/수직) */
+  function drawBridge(g, b) {
+    g.save();
+    g.translate(b.x, b.y);
+    if (!b.horizontal) g.rotate(Math.PI / 2);
+    const L = b.len, HW = 31;
+    // 교각 그림자/기둥
+    g.fillStyle = 'rgba(20,15,8,0.35)';
+    g.fillRect(-L / 2, HW + 2, L, 7);
+    g.fillStyle = '#4a3520';
+    for (let x = -L / 2 + 12; x < L / 2; x += 36) {
+      g.fillRect(x - 4, HW - 4, 9, 16);
+      g.fillRect(x - 4, -HW - 10, 9, 12);
+    }
+    // 상판
+    const grad = g.createLinearGradient(0, -HW, 0, HW);
+    grad.addColorStop(0, '#9a7a4e'); grad.addColorStop(0.5, '#8a6a42'); grad.addColorStop(1, '#75582f');
+    g.fillStyle = grad;
+    g.fillRect(-L / 2, -HW, L, HW * 2);
+    // 판자 줄눈
+    g.strokeStyle = 'rgba(55,38,18,0.5)'; g.lineWidth = 1.4;
+    for (let x = -L / 2 + 9; x < L / 2; x += 9) {
+      g.beginPath(); g.moveTo(x, -HW + 1); g.lineTo(x, HW - 1); g.stroke();
+    }
+    // 가장자리 보
+    g.fillStyle = '#5e4426';
+    g.fillRect(-L / 2, -HW - 3, L, 5);
+    g.fillRect(-L / 2, HW - 2, L, 5);
+    // 난간 기둥
+    g.fillStyle = '#6a4a28';
+    for (let x = -L / 2 + 6; x < L / 2; x += 24) {
+      g.fillRect(x, -HW - 12, 5, 11);
+      g.fillRect(x, HW + 1, 5, 9);
+    }
+    g.fillStyle = '#7a5a36';
+    g.fillRect(-L / 2, -HW - 14, L, 4);
+    g.restore();
+  }
+
+  /* 농경지: 이랑이 보이는 경작지 */
+  function drawField(g, f, rnd) {
+    g.save();
+    g.translate(f.x, f.y);
+    g.rotate(f.a || 0);
+    g.fillStyle = 'rgba(178,150,92,0.92)';
+    const r = 10;
+    g.beginPath();
+    g.moveTo(-f.w / 2 + r, -f.h / 2);
+    g.arcTo(f.w / 2, -f.h / 2, f.w / 2, f.h / 2, r);
+    g.arcTo(f.w / 2, f.h / 2, -f.w / 2, f.h / 2, r);
+    g.arcTo(-f.w / 2, f.h / 2, -f.w / 2, -f.h / 2, r);
+    g.arcTo(-f.w / 2, -f.h / 2, f.w / 2, -f.h / 2, r);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(95,72,38,0.5)'; g.lineWidth = 2; g.stroke();
+    // 이랑
+    g.strokeStyle = 'rgba(110,84,46,0.65)'; g.lineWidth = 2.4;
+    for (let y = -f.h / 2 + 7; y < f.h / 2 - 3; y += 9) {
+      g.beginPath(); g.moveTo(-f.w / 2 + 6, y); g.lineTo(f.w / 2 - 6, y); g.stroke();
+    }
+    // 새싹
+    g.fillStyle = 'rgba(96,150,60,0.9)';
+    for (let i = 0; i < f.w * f.h / 260; i++) {
+      g.fillRect(-f.w / 2 + 8 + rnd() * (f.w - 16), -f.h / 2 + 5 + Math.floor(rnd() * (f.h / 9)) * 9, 2.5, 4);
+    }
+    g.restore();
+  }
+
+  /* 수면 채우기 (해안/강) + 물가 라인 */
+  function fillWater(g, buildEdge, rnd) {
+    const waterPat = TerrainTex.pattern(g, 'tex_water', 240);
+    g.save();
+    buildEdge(g);
+    if (waterPat) { g.fillStyle = waterPat; g.globalAlpha = 0.95; g.fill(); g.globalAlpha = 1; }
+    else { g.fillStyle = 'rgba(46,108,142,0.85)'; g.fill(); }
+    // 깊이감
+    g.clip();
+    const dg = g.createLinearGradient(0, 0, 0, 600);
+    dg.addColorStop(0, 'rgba(0,0,0,0)'); dg.addColorStop(1, 'rgba(8,28,52,0.35)');
+    g.fillStyle = dg; g.fillRect(0, 0, 960, 600);
+    g.restore();
   }
 
   function terrain(stage, pathPts) {
@@ -469,8 +556,71 @@ const Sprites = (() => {
       g.beginPath(); g.ellipse(x, y, r, r * 0.6, 0, 0, Math.PI * 2); g.fill();
     }
 
-    /* 2) 강 테마: 물 텍스처 가장자리 */
-    if (th.deco === 'river') {
+    const map = stage.map || {};
+    const inWater = (x, y) => {
+      if (map.shoreY != null && y > map.shoreY - 10) return true;
+      if (map.river && x > map.river.x0 - 12 && x < map.river.x1 + 12) return true;
+      return false;
+    };
+
+    /* 1.5) 농경지 */
+    if (map.fields) for (const f of map.fields) drawField(g, f, rnd);
+
+    /* 1.6) 대형 수면: 해안(적벽) */
+    if (map.shoreY != null) {
+      const sy = map.shoreY;
+      const edge = (gg) => {
+        gg.beginPath();
+        gg.moveTo(0, sy);
+        for (let x = 0; x <= W; x += 48) {
+          gg.quadraticCurveTo(x + 24, sy + ((x / 48) % 2 ? 14 : -9), x + 48, sy);
+        }
+        gg.lineTo(W, H); gg.lineTo(0, H); gg.closePath();
+      };
+      fillWater(g, edge, rnd);
+      // 물가 모래톱 + 포말
+      g.strokeStyle = 'rgba(214,196,150,0.85)'; g.lineWidth = 5;
+      g.beginPath(); g.moveTo(0, sy);
+      for (let x = 0; x <= W; x += 48) g.quadraticCurveTo(x + 24, sy + ((x / 48) % 2 ? 14 : -9), x + 48, sy);
+      g.stroke();
+      g.strokeStyle = 'rgba(240,250,250,0.55)'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(0, sy + 7);
+      for (let x = 0; x <= W; x += 48) g.quadraticCurveTo(x + 24, sy + 7 + ((x / 48) % 2 ? 14 : -9), x + 48, sy + 7);
+      g.stroke();
+      // 잔물결
+      g.strokeStyle = 'rgba(235,245,245,0.3)'; g.lineWidth = 1.6;
+      for (let i = 0; i < 26; i++) {
+        const wx = rnd() * W, wy = sy + 26 + rnd() * (H - sy - 36);
+        g.beginPath(); g.moveTo(wx, wy); g.quadraticCurveTo(wx + 11, wy - 3, wx + 22 + rnd() * 14, wy); g.stroke();
+      }
+    }
+    /* 1.7) 대형 수면: 강(장판파) */
+    if (map.river) {
+      const { x0, x1 } = map.river;
+      const edge = (gg) => {
+        gg.beginPath();
+        gg.moveTo(x0, 0);
+        for (let y = 0; y <= H; y += 52) gg.quadraticCurveTo(x0 + ((y / 52) % 2 ? 10 : -7), y + 26, x0, y + 52);
+        gg.lineTo(x1, H);
+        for (let y = H; y >= 0; y -= 52) gg.quadraticCurveTo(x1 + ((y / 52) % 2 ? -9 : 8), y - 26, x1, y - 52);
+        gg.closePath();
+      };
+      fillWater(g, edge, rnd);
+      for (const bx of [x0, x1]) {
+        g.strokeStyle = 'rgba(214,196,150,0.8)'; g.lineWidth = 4.5;
+        g.beginPath(); g.moveTo(bx, 0);
+        for (let y = 0; y <= H; y += 52) g.quadraticCurveTo(bx + ((y / 52) % 2 ? 10 : -7) * (bx === x0 ? 1 : -1), y + 26, bx, y + 52);
+        g.stroke();
+      }
+      g.strokeStyle = 'rgba(235,245,245,0.3)'; g.lineWidth = 1.6;
+      for (let i = 0; i < 14; i++) {
+        const wx = x0 + 12 + rnd() * (x1 - x0 - 26), wy = rnd() * H;
+        g.beginPath(); g.moveTo(wx, wy); g.quadraticCurveTo(wx + 9, wy - 3, wx + 18, wy); g.stroke();
+      }
+    }
+
+    /* 2) 강 테마: 물 텍스처 가장자리 (전용 수면 명세가 없을 때만) */
+    if (th.deco === 'river' && map.shoreY == null) {
       const waterPat = TerrainTex.pattern(g, 'tex_water', 240);
       g.save();
       g.beginPath();
@@ -504,11 +654,15 @@ const Sprites = (() => {
       strokePathOn(g, path, 44, th.path);
       strokePathOn(g, path, 28, shade(th.path.startsWith('#') ? th.path : '#c2a878', 12));
     }
+    // 다리 (강을 건너는 구간)
+    if (map.bridge) drawBridge(g, map.bridge);
+
     // 닳은 중앙 자국 + 수레바퀴 홈
     strokePathOn(g, path, 13, 'rgba(255,238,190,0.10)');
     strokePathOn(g, path, 30, 'rgba(60,40,15,0.07)');
     // 길가 디테일: 자갈, 풀 돋움
     for (const p of pathPts) {
+      if (inWater(p.x, p.y)) continue;
       if (rnd() < 0.55) {
         const a = rnd() * Math.PI * 2, d = 14 + rnd() * 9;
         g.fillStyle = `rgba(${100 + rnd() * 40 | 0},${80 + rnd() * 30 | 0},${50 + rnd() * 20 | 0},${0.4 + rnd() * 0.3})`;
@@ -538,9 +692,41 @@ const Sprites = (() => {
       river: ['reed', 'round', 'reed', 'rock', 'tuft', 'bamboo', 'reed'],
     }[th.deco] || ['tuft'];
     const clearOf = (x, y, r) =>
+      !inWater(x, y) &&
       !stage.spots.some(sp => Math.hypot(sp[0] - x, sp[1] - y) < r + 30) &&
       !pathPts.some(p => Math.hypot(p.x - x, p.y - y) < r + 26);
     const placed = [];
+
+    /* 시나리오 대형 지형 */
+    if (map.ranges) for (const rg of map.ranges) {
+      const [a, b] = rg.along;
+      for (let i = 0; i < rg.n; i++) {
+        const t = rg.n === 1 ? 0.5 : i / (rg.n - 1);
+        const x = a[0] + (b[0] - a[0]) * t + (rnd() - 0.5) * 56;
+        const y = a[1] + (b[1] - a[1]) * t + (rnd() - 0.5) * 30;
+        if (pathPts.some(p => Math.hypot(p.x - x, p.y - y) < 40)) continue;
+        placed.push({ name: rg.kind, x, y, h: rg.h * (0.8 + rnd() * 0.4), flip: rnd() > 0.5 });
+      }
+    }
+    if (map.forests) for (const fo of map.forests) {
+      for (let i = 0; i < fo.n; i++) {
+        const a = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * fo.r;
+        const x = fo.x + Math.cos(a) * d, y = fo.y + Math.sin(a) * d * 0.7;
+        if (!clearOf(x, y, 12)) continue;
+        placed.push({ name: fo.kind, x, y, h: 50 + rnd() * 34, flip: rnd() > 0.5 });
+      }
+    }
+    if (map.villages) for (const vg of map.villages) {
+      for (let i = 0; i < vg.n; i++) {
+        const a = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * vg.r;
+        const x = vg.x + Math.cos(a) * d, y = vg.y + Math.sin(a) * d * 0.7;
+        if (!clearOf(x, y, 18)) continue;
+        placed.push({ name: 'deco_hut', x, y, h: 52 + rnd() * 16, flip: rnd() > 0.5 });
+      }
+    }
+    if (map.ships) for (const sh of map.ships) {
+      placed.push({ name: 'deco_ship', x: sh.x, y: sh.y, h: sh.h, flip: !!sh.flip, noShadow: true });
+    }
     let tries = 0;
     // 가장자리에 큰 장식(산/숲) 우선 배치
     while (placed.length < 14 && tries < 260) {
@@ -564,14 +750,14 @@ const Sprites = (() => {
     placed.sort((a, b) => a.y - b.y);
     let fbIdx = 0;
     for (const d of placed) {
-      if (!drawDecoSprite(g, d.name, d.x, d.y, d.h, d.flip)) {
-        drawTree(g, d.x, d.y, 0, fallback[(fbIdx++) % fallback.length]);
+      if (!drawDecoSprite(g, d.name, d.x, d.y, d.h, d.flip, d.noShadow)) {
+        if (!d.noShadow) drawTree(g, d.x, d.y, 0, fallback[(fbIdx++) % fallback.length]);
       }
     }
     // 들꽃 (잔디 위 점묘)
     for (let i = 0; i < 64; i++) {
       const x = rnd() * W, y = rnd() * H;
-      if (pathPts.some(p => Math.hypot(p.x - x, p.y - y) < 26)) continue;
+      if (inWater(x, y) || pathPts.some(p => Math.hypot(p.x - x, p.y - y) < 26)) continue;
       g.fillStyle = ['#e8c84a', '#e87a6a', '#f0f0e0', '#c87ae0'][Math.floor(rnd() * 4)];
       g.fillRect(x, y, 2, 2);
     }
@@ -648,7 +834,7 @@ const SpriteImages = (() => {
     'unit_siege', 'unit_soldier', 'unit_general',
     'hero_liubei', 'hero_guanyu', 'hero_zhangfei', 'hero_zhaoyun', 'hero_zhugeliang',
     'deco_pine', 'deco_tree', 'deco_bamboo', 'deco_rock', 'deco_hut',
-    'deco_mountain', 'deco_bush', 'deco_gate', 'deco_fortress',
+    'deco_mountain', 'deco_bush', 'deco_gate', 'deco_fortress', 'deco_ship',
   ];
   const store = {};   // name -> { img, ready, bx, by, bw, bh }
   const varCache = new Map();
