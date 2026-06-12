@@ -681,6 +681,48 @@ function drawSprite(img, x, y, targetH, face = 1) {
   ctx.restore();
 }
 
+/* 일러스트 스프라이트: 발 기준점(x,y), 좌우 반전, 걷기 스웨이(라디안) */
+function drawIllust(img, x, y, targetH, face = 1, sway = 0) {
+  const s = targetH / img.height;
+  const w = img.width * s, h = img.height * s;
+  ctx.save();
+  ctx.translate(x, y);
+  if (sway) ctx.rotate(sway);
+  if (face < 0) ctx.scale(-1, 1);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, -w / 2, -h, w, h);
+  ctx.restore();
+}
+
+/* 일러스트 매핑: [기본 스프라이트, 색조 필터] — 필터로 변형 타입을 만든다 */
+const UNIT_ILLUST = {
+  yellowTurban: ['unit_yellowturban', null],
+  bandit:       ['unit_yellowturban', 'grayscale(0.55) brightness(0.82)'],
+  archerFoot:   ['unit_archer', null],
+  shaman:       ['unit_archer', 'hue-rotate(55deg) saturate(1.6) brightness(1.15)'],
+  infantry:     ['unit_infantry', null],
+  navy:         ['unit_infantry', 'hue-rotate(135deg) saturate(1.2)'],
+  elite:        ['unit_infantry', 'hue-rotate(65deg) saturate(1.5)'],
+  cavalry:      ['unit_cavalry', null],
+  tigerGuard:   ['unit_cavalry', 'hue-rotate(-150deg) saturate(1.45) brightness(0.92)'],
+  siege:        ['unit_siege', null],
+};
+const BOSS_ILLUST_HUE = {
+  zhangJiao: 'hue-rotate(55deg) saturate(1.6) brightness(1.2)',
+  huaXiong: null,
+  caoRen: 'hue-rotate(195deg)',
+  lvBu: 'saturate(1.7) brightness(1.05)',
+  zhangHe: 'hue-rotate(255deg)',
+  xiahouDun: 'hue-rotate(120deg) brightness(0.9)',
+  caoChun: 'hue-rotate(40deg) saturate(1.3)',
+  caiMao: 'hue-rotate(175deg) saturate(1.2)',
+  zhangRen: 'hue-rotate(90deg) brightness(0.95)',
+  xiahouYuan: 'hue-rotate(-18deg) saturate(1.45)',
+};
+const TOWER_ILLUST = { archer: 'tower_archer', barracks: 'tower_barracks', catapult: 'tower_catapult', fire: 'tower_fire' };
+const TOWER_LV_FX = ['brightness(0.92)', null, 'saturate(1.2) brightness(1.07)'];
+
 function drawSpots() {
   const img = Sprites.spot();
   for (let i = 0; i < G.towers.length; i++) {
@@ -713,7 +755,9 @@ function drawTowers() {
       }
     }
     shadow(t.x, t.y + 14, 19);
-    drawSprite(Sprites.tower(t.type, t.level), t.x, t.y + 18, 62);
+    const tImg = SpriteImages.variant(TOWER_ILLUST[t.type], TOWER_LV_FX[t.level]);
+    if (tImg) drawIllust(tImg, t.x, t.y + 18, 60 + t.level * 5);
+    else drawSprite(Sprites.tower(t.type, t.level), t.x, t.y + 18, 62);
     // 레벨 표식 (금색 마름모)
     for (let s = 0; s <= t.level; s++) {
       ctx.save();
@@ -758,14 +802,22 @@ function drawUnits() {
       const frame = Math.floor(e.wobble * 1.6) % 2;
       const ahead = pointAt(G.stage.path, e.progress + 6);
       const face = (e.blocker && !e.blocker.dead) ? (e.blocker.x >= e.x ? 1 : -1) : (ahead.x >= e.x - 0.3 ? 1 : -1);
-      const hgt = e.isBoss ? 38 : 26;
+      const map = e.isBoss ? ['unit_general', BOSS_ILLUST_HUE[e.typeId]] : UNIT_ILLUST[e.typeId];
+      const uImg = map ? SpriteImages.variant(map[0], map[1]) : null;
+      const hgt = uImg ? (e.isBoss ? 48 : 30) : (e.isBoss ? 38 : 26);
       shadow(e.x, e.y + 9, e.isBoss ? 14 : 9);
       if (e.shielded) {
         ctx.beginPath(); ctx.arc(e.x, e.y - 8, 20, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(120,180,255,0.28)'; ctx.fill();
         ctx.strokeStyle = 'rgba(160,210,255,0.7)'; ctx.stroke();
       }
-      drawSprite(Sprites.unit(e.typeId, frame), e.x, e.y + 9, hgt, face);
+      if (uImg) {
+        const sway = (e.stun > 0 || (e.blocker && !e.blocker.dead)) ? 0 : Math.sin(e.wobble * 1.8) * 0.07;
+        const bob = Math.abs(Math.sin(e.wobble * 1.8)) * 1.6;
+        drawIllust(uImg, e.x, e.y + 9 - bob, hgt, face, sway);
+      } else {
+        drawSprite(Sprites.unit(e.typeId, frame), e.x, e.y + 9, hgt, face);
+      }
       if (e.burnTime > 0) miniFlame(e.x, e.y - hgt + 4, G.time);
       if (e.stun > 0) {
         for (let k = 0; k < 3; k++) {
@@ -792,7 +844,9 @@ function drawUnits() {
       const s = u;
       const face = s.target && !s.target.dead ? (s.target.x >= s.x ? 1 : -1) : 1;
       shadow(s.x, s.y + 8, 8);
-      drawSprite(Sprites.unit('soldier', Math.floor(G.time * 4 + s.homeOff) % 2), s.x, s.y + 8, 24, face);
+      const sImg = SpriteImages.variant('unit_soldier', null);
+      if (sImg) drawIllust(sImg, s.x, s.y + 8, 27, face, Math.sin(G.time * 6 + s.homeOff) * 0.04);
+      else drawSprite(Sprites.unit('soldier', Math.floor(G.time * 4 + s.homeOff) % 2), s.x, s.y + 8, 24, face);
       drawHpBar(s.x, s.y - 22, 20, s.hp / s.maxHp, '#4aa4e0');
     } else {
       const hh = u;
@@ -813,7 +867,13 @@ function drawUnits() {
       ctx.globalAlpha = 0.85; ctx.stroke(); ctx.globalAlpha = 1;
       shadow(hh.x, hh.y + 8, 10);
       const moving = Math.hypot(hh.tx - hh.x, hh.ty - hh.y) > 6 || (hh.target && !hh.target.dead);
-      drawSprite(Sprites.unit(hh.def.id, moving ? Math.floor(G.time * 5) % 2 : 0), hh.x, hh.y + 9, 30, face);
+      const hImg = SpriteImages.variant('hero_' + hh.def.id, null);
+      if (hImg) {
+        const sway = moving ? Math.sin(G.time * 9) * 0.06 : Math.sin(G.time * 2.2) * 0.018;
+        drawIllust(hImg, hh.x, hh.y + 9, 36, face, sway);
+      } else {
+        drawSprite(Sprites.unit(hh.def.id, moving ? Math.floor(G.time * 5) % 2 : 0), hh.x, hh.y + 9, 30, face);
+      }
       ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
       ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 3;
       ctx.strokeText(`${hh.def.name} Lv.${hh.level}`, hh.x, hh.y - 30);
