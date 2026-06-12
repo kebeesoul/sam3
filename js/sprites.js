@@ -563,6 +563,69 @@ const Sprites = (() => {
       return false;
     };
 
+    /* 1.4) 고원 단차: 절벽 림 + 능선 하이라이트로 높낮이 표현 */
+    const hillEdges = []; // 길 경사 표식용 림 정보
+    if (map.hills) for (const hl of map.hills) {
+      const segs = 26;
+      const pts = [];
+      for (let i = 0; i < segs; i++) {
+        const a = (i / segs) * Math.PI * 2;
+        const wob = 1 + (rnd() - 0.5) * 0.22;
+        pts.push([hl.x + Math.cos(a) * hl.rx * wob, hl.y + Math.sin(a) * hl.ry * wob]);
+      }
+      hillEdges.push({ hl, pts });
+      const blob = (gg) => {
+        gg.beginPath();
+        gg.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i <= segs; i++) {
+          const p = pts[i % segs], q = pts[(i + 1) % segs];
+          gg.quadraticCurveTo(p[0], p[1], (p[0] + q[0]) / 2, (p[1] + q[1]) / 2);
+        }
+        gg.closePath();
+      };
+      // 고지대 면: 살짝 밝은 풀 + 위쪽으로 갈수록 밝아지는 경사 그라데이션
+      g.save();
+      blob(g);
+      g.clip();
+      g.fillStyle = 'rgba(235,240,205,0.10)';
+      g.fillRect(hl.x - hl.rx * 1.4, hl.y - hl.ry * 1.4, hl.rx * 2.8, hl.ry * 2.8);
+      const eg = g.createLinearGradient(0, hl.y - hl.ry, 0, hl.y + hl.ry);
+      eg.addColorStop(0, 'rgba(255,255,225,0.14)');
+      eg.addColorStop(1, 'rgba(15,28,8,0.16)');
+      g.fillStyle = eg;
+      g.fillRect(hl.x - hl.rx * 1.4, hl.y - hl.ry * 1.4, hl.rx * 2.8, hl.ry * 2.8);
+      g.restore();
+      // 림: 남측(아래)은 절벽 음영 + 빗금, 북측(위)은 능선 하이라이트
+      g.save();
+      blob(g);
+      g.lineWidth = 5;
+      g.strokeStyle = 'rgba(48,36,14,0.42)';
+      g.stroke();
+      g.restore();
+      for (let i = 0; i < segs; i++) {
+        const p = pts[i];
+        const a = Math.atan2(p[1] - hl.y, (p[0] - hl.x) * (hl.ry / hl.rx));
+        if (Math.sin(a) > 0.15) {
+          // 절벽 빗금 (아래쪽 림)
+          g.strokeStyle = 'rgba(40,30,12,0.5)';
+          g.lineWidth = 2;
+          for (let k = -1; k <= 1; k++) {
+            g.beginPath();
+            g.moveTo(p[0] + k * 7, p[1]);
+            g.lineTo(p[0] + k * 7 - 2, p[1] + 7 + rnd() * 4);
+            g.stroke();
+          }
+        } else if (Math.sin(a) < -0.3) {
+          g.strokeStyle = 'rgba(255,255,225,0.4)';
+          g.lineWidth = 2.5;
+          g.beginPath();
+          g.moveTo(p[0] - 6, p[1] - 2);
+          g.lineTo(p[0] + 6, p[1] - 1);
+          g.stroke();
+        }
+      }
+    }
+
     /* 1.5) 농경지 */
     if (map.fields) for (const f of map.fields) drawField(g, f, rnd);
 
@@ -660,6 +723,32 @@ const Sprites = (() => {
     // 닳은 중앙 자국 + 수레바퀴 홈
     strokePathOn(g, path, 13, 'rgba(255,238,190,0.10)');
     strokePathOn(g, path, 30, 'rgba(60,40,15,0.07)');
+    // 오르막/내리막 표식: 길이 고원 림을 통과하는 지점에 계단 밴드
+    if (map.hills && hillEdges.length) {
+      for (const { hl } of hillEdges) {
+        for (let i = 1; i < pathPts.length - 1; i++) {
+          const p = pathPts[i];
+          const nd = Math.hypot((p.x - hl.x) / hl.rx, (p.y - hl.y) / hl.ry);
+          if (nd < 0.93 || nd > 1.07) continue;
+          const q = pathPts[i + 1];
+          const ang = Math.atan2(q.y - p.y, q.x - p.x);
+          g.save();
+          g.translate(p.x, p.y);
+          g.rotate(ang);
+          for (let k = 0; k < 4; k++) {
+            g.strokeStyle = k % 2 ? 'rgba(70,50,22,0.55)' : 'rgba(235,215,170,0.5)';
+            g.lineWidth = 3;
+            g.beginPath();
+            g.moveTo(k * 6 - 9, -19);
+            g.lineTo(k * 6 - 9, 19);
+            g.stroke();
+          }
+          g.restore();
+          i += 2; // 같은 림에서 과밀 방지
+        }
+      }
+    }
+
     // 길가 디테일: 자갈, 풀 돋움
     for (const p of pathPts) {
       if (inWater(p.x, p.y)) continue;
@@ -691,6 +780,12 @@ const Sprites = (() => {
       mountain: ['mtn', 'pine', 'rock', 'rock', 'pine', 'tuft', 'mtn'],
       river: ['reed', 'round', 'reed', 'rock', 'tuft', 'bamboo', 'reed'],
     }[th.deco] || ['tuft'];
+    /* 스프라이트 실제 점유 영역(폭≈높이*0.9, 위로 h)을 기준으로 길/부지 차단 검사 */
+    const blocksPath = (x, y, h) =>
+      pathPts.some(p => Math.abs(p.x - x) < h * 0.45 + 27 && p.y > y - h - 8 && p.y < y + 16);
+    const blocksSpot = (x, y, h) =>
+      stage.spots.some(sp => Math.abs(sp[0] - x) < h * 0.45 + 28 && sp[1] > y - h - 8 && sp[1] < y + 22);
+    const canPlace = (x, y, h) => !inWater(x, y) && !blocksPath(x, y, h) && !blocksSpot(x, y, h);
     const clearOf = (x, y, r) =>
       !inWater(x, y) &&
       !stage.spots.some(sp => Math.hypot(sp[0] - x, sp[1] - y) < r + 30) &&
@@ -704,24 +799,27 @@ const Sprites = (() => {
         const t = rg.n === 1 ? 0.5 : i / (rg.n - 1);
         const x = a[0] + (b[0] - a[0]) * t + (rnd() - 0.5) * 56;
         const y = a[1] + (b[1] - a[1]) * t + (rnd() - 0.5) * 30;
-        if (pathPts.some(p => Math.hypot(p.x - x, p.y - y) < 40)) continue;
-        placed.push({ name: rg.kind, x, y, h: rg.h * (0.8 + rnd() * 0.4), flip: rnd() > 0.5 });
+        const hh = rg.h * (0.8 + rnd() * 0.4);
+        if (!canPlace(x, y, hh)) continue;
+        placed.push({ name: rg.kind, x, y, h: hh, flip: rnd() > 0.5 });
       }
     }
     if (map.forests) for (const fo of map.forests) {
       for (let i = 0; i < fo.n; i++) {
         const a = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * fo.r;
         const x = fo.x + Math.cos(a) * d, y = fo.y + Math.sin(a) * d * 0.7;
-        if (!clearOf(x, y, 12)) continue;
-        placed.push({ name: fo.kind, x, y, h: 50 + rnd() * 34, flip: rnd() > 0.5 });
+        const hh = 50 + rnd() * 34;
+        if (!canPlace(x, y, hh)) continue;
+        placed.push({ name: fo.kind, x, y, h: hh, flip: rnd() > 0.5 });
       }
     }
     if (map.villages) for (const vg of map.villages) {
       for (let i = 0; i < vg.n; i++) {
         const a = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * vg.r;
         const x = vg.x + Math.cos(a) * d, y = vg.y + Math.sin(a) * d * 0.7;
-        if (!clearOf(x, y, 18)) continue;
-        placed.push({ name: 'deco_hut', x, y, h: 52 + rnd() * 16, flip: rnd() > 0.5 });
+        const hh = 52 + rnd() * 16;
+        if (!canPlace(x, y, hh)) continue;
+        placed.push({ name: 'deco_hut', x, y, h: hh, flip: rnd() > 0.5 });
       }
     }
     if (map.ships) for (const sh of map.ships) {
@@ -734,18 +832,20 @@ const Sprites = (() => {
       const edge = Math.floor(rnd() * 4);
       const x = edge === 0 ? 16 + rnd() * 70 : edge === 1 ? W - 16 - rnd() * 70 : 20 + rnd() * (W - 40);
       const y = edge === 2 ? 22 + rnd() * 60 : edge === 3 ? H - 14 - rnd() * 55 : 30 + rnd() * (H - 60);
-      if (!clearOf(x, y, 22)) continue;
-      const [name, hh] = decos[Math.floor(rnd() * 2)]; // 테마 대표 장식
-      placed.push({ name, x, y, h: hh * (0.85 + rnd() * 0.45), flip: rnd() > 0.5 });
+      const [name, baseH] = decos[Math.floor(rnd() * 2)]; // 테마 대표 장식
+      const hh = baseH * (0.85 + rnd() * 0.45);
+      if (!canPlace(x, y, hh)) continue;
+      placed.push({ name, x, y, h: hh, flip: rnd() > 0.5 });
     }
     // 내부 산포
     tries = 0;
     while (placed.length < 52 && tries < 600) {
       tries++;
       const x = 20 + rnd() * (W - 40), y = 30 + rnd() * (H - 44);
-      if (!clearOf(x, y, 14)) continue;
-      const [name, hh] = decos[Math.floor(rnd() * decos.length)];
-      placed.push({ name, x, y, h: hh * (0.7 + rnd() * 0.55), flip: rnd() > 0.5 });
+      const [name, baseH] = decos[Math.floor(rnd() * decos.length)];
+      const hh = baseH * (0.7 + rnd() * 0.55);
+      if (!canPlace(x, y, hh)) continue;
+      placed.push({ name, x, y, h: hh, flip: rnd() > 0.5 });
     }
     placed.sort((a, b) => a.y - b.y);
     let fbIdx = 0;
