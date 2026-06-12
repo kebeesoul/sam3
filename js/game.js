@@ -623,6 +623,7 @@ function loseStage() {
     persistSave();
   }
   setTimeout(() => {
+    $('#result').classList.remove('win'); $('#result').classList.add('lose');
     $('#result-title').textContent = '패배...';
     $('#result-stars').textContent = '💀';
     $('#result-msg').textContent = '본진이 함락되었습니다. 다시 도전하십시오!';
@@ -1079,7 +1080,7 @@ function openBuildMenu(idx) {
       const cost = def.levels[0].cost;
       const btn = document.createElement('button');
       btn.className = 'bm-btn' + (G.gold < cost ? ' disabled' : '');
-      btn.innerHTML = `<span class="bm-icon">${def.icon}</span><span class="bm-name">${def.name}</span><span class="bm-cost">💰${cost}</span>`;
+      btn.innerHTML = `<span class="bm-icon"><img src="assets/img/icon_${key}.jpg" alt="" onerror="this.outerHTML='${def.icon}'"></span><span class="bm-name">${def.name}</span><span class="bm-cost">💰${cost}</span>`;
       btn.title = def.desc;
       btn.onclick = () => {
         if (G.gold < cost) return;
@@ -1190,7 +1191,7 @@ const PORTRAIT_FILES = { '유비': 'liubei', '관우': 'guanyu', '장비': 'zhan
 const PORTRAIT_EMOJI = { '유비': '👑', '관우': '🟥', '장비': '🐍', '조운': '⚪', '제갈량': '🪶', '조조': '🧔', '도겸': '👴' };
 function portraitHtml(key, fallback) {
   if (!key) return `<span class="pt-fb">${fallback}</span>`;
-  return `<img src="assets/img/portrait_${key}.png" alt="" onerror="this.outerHTML='<span class=&quot;pt-fb&quot;>${fallback}</span>'">`;
+  return `<img src="assets/img/portrait_${key}.jpg" alt="" onerror="this.outerHTML='<span class=&quot;pt-fb&quot;>${fallback}</span>'">`;
 }
 
 function renderDlgLine() {
@@ -1252,6 +1253,7 @@ function startStage(stage, heroId) {
 
 function showOutro(stage, stars) {
   showDialogue(stage.outro, () => {
+    $('#result').classList.remove('lose'); $('#result').classList.add('win');
     $('#result-title').textContent = '승리!';
     $('#result-stars').textContent = '⭐'.repeat(stars) + '☆'.repeat(3 - stars);
     $('#result-msg').textContent = stage.id >= STAGES.length - 1

@@ -134,7 +134,8 @@ canvas#game {
 .bm-btn:hover { background: #524228; }
 .bm-btn.disabled { opacity: 0.45; cursor: not-allowed; }
 .bm-btn.sell { border-color: #8a4a4a; }
-.bm-icon { font-size: 16px; }
+.bm-icon { font-size: 16px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.bm-icon img { width: 30px; height: 30px; object-fit: cover; border-radius: 5px; display: block; }
 .bm-name { flex: 1; text-align: left; }
 .bm-cost { color: #ffd700; font-size: 12px; }
 
@@ -155,14 +156,26 @@ canvas#game {
 #title {
   background:
     linear-gradient(rgba(12, 7, 3, 0.45), rgba(12, 7, 3, 0.82)),
-    url('../assets/img/title_bg.png') center / cover no-repeat,
+    url('../assets/img/title_bg.jpg') center / cover no-repeat,
     radial-gradient(ellipse at 50% 30%, #3a2812, #14100c);
 }
 #stage-map, #hero-select, #result {
   background:
     linear-gradient(rgba(14, 9, 4, 0.62), rgba(14, 9, 4, 0.85)),
-    url('../assets/img/map_bg.png') center / cover no-repeat,
+    url('../assets/img/map_bg.jpg') center / cover no-repeat,
     radial-gradient(ellipse at 50% 30%, #2c2014, #14100c);
+}
+#result.win {
+  background:
+    linear-gradient(rgba(20, 12, 2, 0.45), rgba(20, 12, 2, 0.8)),
+    url('../assets/img/victory_bg.jpg') center / cover no-repeat,
+    radial-gradient(ellipse at 50% 30%, #3a2812, #14100c);
+}
+#result.lose {
+  background:
+    linear-gradient(rgba(8, 8, 12, 0.55), rgba(8, 8, 12, 0.85)),
+    url('../assets/img/defeat_bg.jpg') center / cover no-repeat,
+    radial-gradient(ellipse at 50% 30%, #1c2028, #0c0e12);
 }
 #title .panel, #stage-map .panel, #hero-select .panel, #result .panel {
   background:
