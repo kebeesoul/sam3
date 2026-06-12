@@ -1,0 +1,17 @@
+[
+  {"name":"portrait_liubei","url":"https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_153456_fc118418-21e9-4506-af95-88e9520ccb4b.png","maxW":512,"quality":0.88},
+  {"name":"portrait_guanyu","url":"https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_153502_d748fe6c-dbde-42b5-8e83-57914b8a7c34.png","maxW":512,"quality":0.88},
+  {"name":"portrait_zhangfei","url":"https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_153505_4662d4c3-aa08-45d3-a4bb-aee6ec2ded09.png","maxW":512,"quality":0.88},
+  {"name":"portrait_zhaoyun","url":"https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_153509_f2a41b23-52f1-45ff-9976-ff0c8ae2e86f.png","maxW":512,"quality":0.88},
+  {"name":"portrait_zhugeliang","url":"https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_153512_8c68b5fe-2fa8-4ed7-b23e-66baa92a8e4a.png","maxW":512,"quality":0.88},
+  {"name":"portrait_caocao","url":"https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_153514_123180ce-201d-4947-b617-0d7f0b92e191.png","maxW":512,"quality":0.88},
+  {"name":"portrait_taoqian","url":"https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_153521_1b6a8d4d-4f7f-43bf-a26f-d03998801846.png","maxW":512,"quality":0.88},
+  {"name":"title_bg","url":"https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_153524_c30953be-3866-40c5-97ff-f7dce82b2e4e.png","maxW":1376,"quality":0.84},
+  {"name":"map_bg","url":"https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_153526_54c21d31-9e51-48b6-b385-64f102461ea4.png","maxW":1376,"quality":0.84},
+  {"name":"icon_archer","url":"https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_154547_e7964362-1c65-4811-9347-1d2b2c3fea63.png","maxW":256,"quality":0.88},
+  {"name":"icon_barracks","url":"https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_154550_43b8d8c7-471e-41a6-858e-71841f540b8e.png","maxW":256,"quality":0.88},
+  {"name":"icon_catapult","url":"https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_154553_d5617b89-5d01-44b7-858c-21836ddf1323.png","maxW":256,"quality":0.88},
+  {"name":"icon_fire","url":"https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_154647_4abc1976-a354-4557-b07b-a6834d722010.png","maxW":256,"quality":0.88},
+  {"name":"victory_bg","url":"https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_154650_e2dceab7-84a2-4bf8-99dd-8fd41a101e48.png","maxW":1376,"quality":0.84},
+  {"name":"defeat_bg","url":"https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_154658_38c2416b-f4d6-4c70-a441-bdc963ec0cdb.png","maxW":1376,"quality":0.84}
+]

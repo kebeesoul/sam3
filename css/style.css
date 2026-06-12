@@ -134,7 +134,8 @@ canvas#game {
 .bm-btn:hover { background: #524228; }
 .bm-btn.disabled { opacity: 0.45; cursor: not-allowed; }
 .bm-btn.sell { border-color: #8a4a4a; }
-.bm-icon { font-size: 16px; }
+.bm-icon { font-size: 16px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.bm-icon img { width: 30px; height: 30px; object-fit: cover; border-radius: 5px; display: block; }
 .bm-name { flex: 1; text-align: left; }
 .bm-cost { color: #ffd700; font-size: 12px; }
 
@@ -150,6 +151,48 @@ canvas#game {
   border-radius: 8px;
 }
 .overlay.active { display: flex; }
+
+/* 일러스트 배경 (이미지가 없으면 어두운 그라데이션만 적용됨) */
+#title {
+  background:
+    linear-gradient(rgba(12, 7, 3, 0.45), rgba(12, 7, 3, 0.82)),
+    url('../assets/img/title_bg.jpg') center / cover no-repeat,
+    radial-gradient(ellipse at 50% 30%, #3a2812, #14100c);
+}
+#stage-map, #hero-select, #result {
+  background:
+    linear-gradient(rgba(14, 9, 4, 0.62), rgba(14, 9, 4, 0.85)),
+    url('../assets/img/map_bg.jpg') center / cover no-repeat,
+    radial-gradient(ellipse at 50% 30%, #2c2014, #14100c);
+}
+#result.win {
+  background:
+    linear-gradient(rgba(20, 12, 2, 0.45), rgba(20, 12, 2, 0.8)),
+    url('../assets/img/victory_bg.jpg') center / cover no-repeat,
+    radial-gradient(ellipse at 50% 30%, #3a2812, #14100c);
+}
+#result.lose {
+  background:
+    linear-gradient(rgba(8, 8, 12, 0.55), rgba(8, 8, 12, 0.85)),
+    url('../assets/img/defeat_bg.jpg') center / cover no-repeat,
+    radial-gradient(ellipse at 50% 30%, #1c2028, #0c0e12);
+}
+#title .panel, #stage-map .panel, #hero-select .panel, #result .panel {
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(180, 120, 40, 0.10), transparent 60%),
+    linear-gradient(rgba(40, 30, 18, 0.92), rgba(22, 16, 10, 0.94));
+}
+
+/* 초상화 이미지 */
+#dlg-portrait img, .hc-icon img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+#dlg-portrait img { border-radius: 10px; }
+.hc-icon { overflow: hidden; }
+.hc-icon img { border-radius: 50%; }
+.pt-fb { font-size: inherit; }
 
 .panel {
   background:
@@ -292,7 +335,8 @@ canvas#game {
 }
 #dlg-portrait {
   font-size: 56px;
-  width: 84px; height: 84px;
+  width: 110px; height: 110px;
+  box-shadow: 0 0 0 1px #2a1c0c, 0 0 0 3px #8a6d4a, 0 0 0 4px #2a1c0c, 0 6px 16px rgba(0,0,0,0.6);
   background: #3a2e1e;
   border: 2px solid #8a6d4a;
   border-radius: 12px;
@@ -331,7 +375,8 @@ canvas#game {
 .hero-card.locked { opacity: 0.45; cursor: not-allowed; }
 .hc-icon {
   font-size: 38px;
-  width: 64px; height: 64px;
+  width: 84px; height: 84px;
+  box-shadow: 0 0 0 2px #2a1c0c, 0 4px 12px rgba(0,0,0,0.5);
   margin: 0 auto 8px;
   border: 3px solid #888;
   border-radius: 50%;
