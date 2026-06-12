@@ -1,0 +1,30 @@
+name: fetch-assets
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download generated illustration assets
+        run: |
+          mkdir -p assets/raw
+          python3 - <<'PY'
+          import json, urllib.request
+          items = json.load(open('tools/assets-manifest.json'))
+          for it in items:
+              dst = f"assets/raw/{it['name']}.png"
+              urllib.request.urlretrieve(it['url'], dst)
+              print('downloaded', dst)
+          PY
+      - name: Commit raw assets
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add assets/raw
+          git commit -m "일러스트 원본 에셋 다운로드 (CI)"
+          git push
