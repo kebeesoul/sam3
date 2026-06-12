@@ -1,6 +1,7 @@
 name: fetch-assets
 on:
-  workflow_dispatch:
+  push:
+    branches: ["claude/**"]
 
 permissions:
   contents: write
@@ -8,9 +9,20 @@ permissions:
 jobs:
   fetch:
     runs-on: ubuntu-latest
+    # CI 자신이 만든 커밋(무한루프 방지)은 건너뛴다
+    if: ${{ !contains(github.event.head_commit.message, '(CI)') }}
     steps:
       - uses: actions/checkout@v4
+      - name: Check if assets already fetched
+        id: check
+        run: |
+          if [ -f assets/raw/portrait_liubei.png ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Download generated illustration assets
+        if: steps.check.outputs.skip == 'false'
         run: |
           mkdir -p assets/raw
           python3 - <<'PY'
@@ -22,6 +34,7 @@ jobs:
               print('downloaded', dst)
           PY
       - name: Commit raw assets
+        if: steps.check.outputs.skip == 'false'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
