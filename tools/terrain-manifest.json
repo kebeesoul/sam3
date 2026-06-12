@@ -1,7 +1,25 @@
 [
  {
-  "name": "deco_ship",
-  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_225528_3562eadb-343f-4137-b517-6e8318322474.png",
+  "name": "deco_range_snow",
+  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_232135_c0fd8c5b-f7f1-460b-b2d8-a820cbef52ac.png",
+  "maxW": 640,
+  "quality": 0.92
+ },
+ {
+  "name": "deco_range_rock",
+  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_232139_594acfd3-0169-41af-b248-3ff3f3c2d89b.png",
+  "maxW": 640,
+  "quality": 0.92
+ },
+ {
+  "name": "deco_grove",
+  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_232142_4875d1c0-dc4f-48b0-b0c8-abca9b74fb62.png",
+  "maxW": 512,
+  "quality": 0.92
+ },
+ {
+  "name": "deco_peak2",
+  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_232146_15da5f2f-139e-4100-9095-555bfae3d6cf.png",
   "maxW": 320,
   "quality": 0.92
  }

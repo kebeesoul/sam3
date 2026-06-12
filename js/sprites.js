@@ -394,14 +394,14 @@ const Sprites = (() => {
   const THEME_DECOS = {
     plain:    [['deco_tree', 56], ['deco_bush', 32], ['deco_rock', 38], ['deco_hut', 58], ['deco_tree', 50], ['deco_bush', 30]],
     forest:   [['deco_pine', 68], ['deco_tree', 56], ['deco_bamboo', 52], ['deco_pine', 60], ['deco_rock', 36], ['deco_bush', 30]],
-    mountain: [['deco_mountain', 120], ['deco_pine', 62], ['deco_rock', 42], ['deco_rock', 34], ['deco_pine', 54], ['deco_bush', 28]],
+    mountain: [['deco_peak2', 96], ['deco_pine', 62], ['deco_rock', 42], ['deco_mountain', 104], ['deco_pine', 54], ['deco_bush', 28]],
     river:    [['deco_bamboo', 54], ['deco_tree', 52], ['deco_rock', 36], ['deco_bush', 30], ['deco_bamboo', 46], ['deco_hut', 54]],
   };
 
   function texturesReadyKey() {
     let k = '';
     for (const n of ['tex_grass', 'tex_dirt', 'tex_water']) k += TerrainTex.ready(n) ? '1' : '0';
-    for (const n of ['deco_pine', 'deco_tree', 'deco_bamboo', 'deco_rock', 'deco_hut', 'deco_mountain', 'deco_bush', 'deco_gate', 'deco_fortress', 'deco_ship']) {
+    for (const n of ['deco_pine', 'deco_tree', 'deco_bamboo', 'deco_rock', 'deco_hut', 'deco_mountain', 'deco_bush', 'deco_gate', 'deco_fortress', 'deco_ship', 'deco_range_snow', 'deco_range_rock', 'deco_grove', 'deco_peak2']) {
       k += (typeof SpriteImages !== 'undefined' && SpriteImages.variant(n, null)) ? '1' : '0';
     }
     return k;
@@ -595,7 +595,20 @@ const Sprites = (() => {
       g.fillStyle = eg;
       g.fillRect(hl.x - hl.rx * 1.4, hl.y - hl.ry * 1.4, hl.rx * 2.8, hl.ry * 2.8);
       g.restore();
-      // 림: 남측(아래)은 절벽 음영 + 빗금, 북측(위)은 능선 하이라이트
+      // 경사 스커트: 림 바깥쪽으로 넓게 내려가는 비탈 구역 (오르막/내리막 지대)
+      g.save();
+      g.translate(hl.x, hl.y);
+      g.scale(hl.rx, hl.ry);
+      const skirt = g.createRadialGradient(0, 0, 0.98, 0, 0, 1.42);
+      skirt.addColorStop(0, 'rgba(30,22,8,0.30)');
+      skirt.addColorStop(0.45, 'rgba(28,22,10,0.14)');
+      skirt.addColorStop(1, 'rgba(28,22,10,0)');
+      g.fillStyle = skirt;
+      g.beginPath(); g.arc(0, 0, 1.45, 0, Math.PI * 2);
+      g.arc(0, 0, 0.96, 0, Math.PI * 2, true);
+      g.fill();
+      g.restore();
+      // 림 라인 + 절벽 빗금/능선 하이라이트
       g.save();
       blob(g);
       g.lineWidth = 5;
@@ -606,13 +619,12 @@ const Sprites = (() => {
         const p = pts[i];
         const a = Math.atan2(p[1] - hl.y, (p[0] - hl.x) * (hl.ry / hl.rx));
         if (Math.sin(a) > 0.15) {
-          // 절벽 빗금 (아래쪽 림)
           g.strokeStyle = 'rgba(40,30,12,0.5)';
           g.lineWidth = 2;
           for (let k = -1; k <= 1; k++) {
             g.beginPath();
             g.moveTo(p[0] + k * 7, p[1]);
-            g.lineTo(p[0] + k * 7 - 2, p[1] + 7 + rnd() * 4);
+            g.lineTo(p[0] + k * 7 - 2, p[1] + 8 + rnd() * 5);
             g.stroke();
           }
         } else if (Math.sin(a) < -0.3) {
@@ -623,6 +635,17 @@ const Sprites = (() => {
           g.lineTo(p[0] + 6, p[1] - 1);
           g.stroke();
         }
+      }
+      // 등고선 (고지 내부, 지형도 느낌의 옅은 곡선)
+      for (const sc of [0.62, 0.32]) {
+        g.save();
+        g.translate(hl.x, hl.y);
+        g.scale(hl.rx * sc, hl.ry * sc);
+        g.beginPath(); g.arc(0, 0, 1, 0, Math.PI * 2);
+        g.restore();
+        g.strokeStyle = 'rgba(50,42,18,0.16)';
+        g.lineWidth = 2;
+        g.stroke();
       }
     }
 
@@ -723,28 +746,36 @@ const Sprites = (() => {
     // 닳은 중앙 자국 + 수레바퀴 홈
     strokePathOn(g, path, 13, 'rgba(255,238,190,0.10)');
     strokePathOn(g, path, 30, 'rgba(60,40,15,0.07)');
-    // 오르막/내리막 표식: 길이 고원 림을 통과하는 지점에 계단 밴드
+    // 오르막/내리막 '구간': 림 안팎의 비탈 지대를 지나는 길 전체에
+    // 명암 그라데이션 + 일정 간격 계단 밴드를 깐다
     if (map.hills && hillEdges.length) {
       for (const { hl } of hillEdges) {
+        let stepTick = 0, run = 0;
         for (let i = 1; i < pathPts.length - 1; i++) {
           const p = pathPts[i];
           const nd = Math.hypot((p.x - hl.x) / hl.rx, (p.y - hl.y) / hl.ry);
-          if (nd < 0.93 || nd > 1.07) continue;
-          const q = pathPts[i + 1];
+          if (nd < 0.93 || nd > 1.28) { stepTick = 0; run = 0; continue; }
+          if (++run > 13) continue; // 림 교차부 주변에만 (능선을 '넘는' 구간)
+          const t = 1 - Math.min(1, Math.abs(nd - 1.1) / 0.24); // 비탈 중심에서 강함
+          const q = pathPts[Math.min(i + 1, pathPts.length - 1)];
           const ang = Math.atan2(q.y - p.y, q.x - p.x);
           g.save();
           g.translate(p.x, p.y);
           g.rotate(ang);
-          for (let k = 0; k < 4; k++) {
-            g.strokeStyle = k % 2 ? 'rgba(70,50,22,0.55)' : 'rgba(235,215,170,0.5)';
+          // 비탈 음영: 내리막쪽이 어두워지는 띠
+          g.fillStyle = `rgba(35,26,10,${0.07 * t})`;
+          g.fillRect(-9, -21, 18, 42);
+          // 계단 밴드 (일정 간격)
+          stepTick++;
+          if (stepTick % 3 === 0) {
+            g.strokeStyle = `rgba(70,50,22,${0.42 * t})`;
             g.lineWidth = 3;
-            g.beginPath();
-            g.moveTo(k * 6 - 9, -19);
-            g.lineTo(k * 6 - 9, 19);
-            g.stroke();
+            g.beginPath(); g.moveTo(0, -19); g.lineTo(0, 19); g.stroke();
+            g.strokeStyle = `rgba(238,218,172,${0.45 * t})`;
+            g.lineWidth = 2;
+            g.beginPath(); g.moveTo(3, -18); g.lineTo(3, 18); g.stroke();
           }
           g.restore();
-          i += 2; // 같은 림에서 과밀 방지
         }
       }
     }
@@ -793,24 +824,51 @@ const Sprites = (() => {
     const placed = [];
 
     /* 시나리오 대형 지형 */
+    const WIDE = { deco_range_snow: 1, deco_range_rock: 1, deco_grove: 1 };
     if (map.ranges) for (const rg of map.ranges) {
       const [a, b] = rg.along;
+      const kinds = Array.isArray(rg.kind) ? rg.kind : [rg.kind];
+      const isWide = WIDE[kinds[0]];
       for (let i = 0; i < rg.n; i++) {
         const t = rg.n === 1 ? 0.5 : i / (rg.n - 1);
-        const x = a[0] + (b[0] - a[0]) * t + (rnd() - 0.5) * 56;
-        const y = a[1] + (b[1] - a[1]) * t + (rnd() - 0.5) * 30;
-        const hh = rg.h * (0.8 + rnd() * 0.4);
-        if (!canPlace(x, y, hh)) continue;
-        placed.push({ name: rg.kind, x, y, h: hh, flip: rnd() > 0.5 });
+        const jit = isWide ? 16 : 56;
+        const x = a[0] + (b[0] - a[0]) * t + (rnd() - 0.5) * jit;
+        const y = a[1] + (b[1] - a[1]) * t + (rnd() - 0.5) * (isWide ? 12 : 30);
+        const hh = rg.h * (isWide ? (0.92 + rnd() * 0.16) : (0.8 + rnd() * 0.4));
+        // 와이드 일러스트는 가로 폭이 크므로 차단 검사 폭을 넓힘
+        const blockH = isWide ? hh * 2.2 : hh;
+        if (pathPts.some(p => Math.abs(p.x - x) < blockH * 0.45 + 27 && p.y > y - hh - 8 && p.y < y + 16)) continue;
+        if (stage.spots.some(sp => Math.abs(sp[0] - x) < blockH * 0.45 + 28 && sp[1] > y - hh - 8 && sp[1] < y + 22)) continue;
+        if (inWater(x, y)) continue;
+        placed.push({ name: kinds[i % kinds.length], x, y, h: hh, flip: i % 2 === 1 });
       }
     }
     if (map.forests) for (const fo of map.forests) {
-      for (let i = 0; i < fo.n; i++) {
-        const a = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * fo.r;
-        const x = fo.x + Math.cos(a) * d, y = fo.y + Math.sin(a) * d * 0.7;
-        const hh = 50 + rnd() * 34;
-        if (!canPlace(x, y, hh)) continue;
-        placed.push({ name: fo.kind, x, y, h: hh, flip: rnd() > 0.5 });
+      if (fo.kind === 'deco_grove') {
+        const groves = Math.max(1, Math.round(fo.n / 4));
+        for (let i = 0; i < groves; i++) {
+          const x = fo.x + (rnd() - 0.5) * fo.r, y = fo.y + (rnd() - 0.5) * fo.r * 0.5;
+          const hh = 100 + rnd() * 40;
+          if (pathPts.some(p => Math.abs(p.x - x) < hh + 27 && p.y > y - hh - 8 && p.y < y + 16)) continue;
+          if (stage.spots.some(sp => Math.abs(sp[0] - x) < hh + 28 && sp[1] > y - hh - 8 && sp[1] < y + 22)) continue;
+          if (inWater(x, y)) continue;
+          placed.push({ name: 'deco_grove', x, y, h: hh, flip: rnd() > 0.5 });
+        }
+        for (let i = 0; i < Math.ceil(fo.n / 2); i++) {
+          const a = rnd() * Math.PI * 2, d = (0.6 + rnd() * 0.5) * fo.r;
+          const x = fo.x + Math.cos(a) * d, y = fo.y + Math.sin(a) * d * 0.7;
+          const hh = 46 + rnd() * 26;
+          if (!canPlace(x, y, hh)) continue;
+          placed.push({ name: rnd() > 0.5 ? 'deco_tree' : 'deco_pine', x, y, h: hh, flip: rnd() > 0.5 });
+        }
+      } else {
+        for (let i = 0; i < fo.n; i++) {
+          const a = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * fo.r;
+          const x = fo.x + Math.cos(a) * d, y = fo.y + Math.sin(a) * d * 0.7;
+          const hh = 50 + rnd() * 34;
+          if (!canPlace(x, y, hh)) continue;
+          placed.push({ name: fo.kind, x, y, h: hh, flip: rnd() > 0.5 });
+        }
       }
     }
     if (map.villages) for (const vg of map.villages) {
@@ -935,6 +993,7 @@ const SpriteImages = (() => {
     'hero_liubei', 'hero_guanyu', 'hero_zhangfei', 'hero_zhaoyun', 'hero_zhugeliang',
     'deco_pine', 'deco_tree', 'deco_bamboo', 'deco_rock', 'deco_hut',
     'deco_mountain', 'deco_bush', 'deco_gate', 'deco_fortress', 'deco_ship',
+    'deco_range_snow', 'deco_range_rock', 'deco_grove', 'deco_peak2',
   ];
   const store = {};   // name -> { img, ready, bx, by, bw, bh }
   const varCache = new Map();
