@@ -495,3 +495,70 @@ const Sprites = (() => {
 
   return { unit, tower, spot, terrain, invalidate, shade };
 })();
+
+/* ============================================================
+   일러스트 스프라이트 로더 (assets/img/*.png, 없으면 픽셀아트 폴백)
+   - 알파 바운딩박스를 계산해 여백을 자동 트림
+   - hue-rotate 등 CSS 필터 변형을 오프스크린에 1회 렌더해 캐시
+   ============================================================ */
+const SpriteImages = (() => {
+  const NAMES = [
+    'tower_archer', 'tower_barracks', 'tower_catapult', 'tower_fire',
+    'unit_yellowturban', 'unit_infantry', 'unit_archer', 'unit_cavalry',
+    'unit_siege', 'unit_soldier', 'unit_general',
+    'hero_liubei', 'hero_guanyu', 'hero_zhangfei', 'hero_zhaoyun', 'hero_zhugeliang',
+  ];
+  const store = {};   // name -> { img, ready, bx, by, bw, bh }
+  const varCache = new Map();
+
+  function trimBox(img) {
+    try {
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      let minX = c.width, minY = c.height, maxX = 0, maxY = 0;
+      for (let y = 0; y < c.height; y += 2) {
+        for (let x = 0; x < c.width; x += 2) {
+          if (d[(y * c.width + x) * 4 + 3] > 24) {
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+          }
+        }
+      }
+      if (maxX <= minX || maxY <= minY) return { bx: 0, by: 0, bw: img.width, bh: img.height };
+      return { bx: minX, by: minY, bw: maxX - minX + 2, bh: maxY - minY + 2 };
+    } catch (e) {
+      return { bx: 0, by: 0, bw: img.width, bh: img.height };
+    }
+  }
+
+  const hasImage = typeof Image !== 'undefined';
+  for (const name of NAMES) {
+    if (!hasImage) { store[name] = { ready: false }; continue; }
+    const img = new Image();
+    const entry = { img, ready: false, bx: 0, by: 0, bw: 0, bh: 0 };
+    img.onload = () => { Object.assign(entry, trimBox(img)); entry.ready = true; };
+    img.onerror = () => { entry.ready = false; };
+    img.src = `assets/img/${name}.png`;
+    store[name] = entry;
+  }
+
+  /* 변형 스프라이트: 트림된 영역을 (필터 적용해) 오프스크린에 굽는다 */
+  function variant(name, filter) {
+    const e = store[name];
+    if (!e || !e.ready) return null;
+    const key = name + '|' + (filter || '');
+    if (varCache.has(key)) return varCache.get(key);
+    const c = document.createElement('canvas');
+    c.width = e.bw; c.height = e.bh;
+    const g = c.getContext('2d');
+    if (filter) g.filter = filter;
+    g.drawImage(e.img, e.bx, e.by, e.bw, e.bh, 0, 0, e.bw, e.bh);
+    varCache.set(key, c);
+    return c;
+  }
+
+  return { variant };
+})();

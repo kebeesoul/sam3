@@ -10,7 +10,8 @@ const fs = require('fs');
     const buf = fs.readFileSync(it.src);
     const b64 = buf.toString('base64');
     const dataUrl = `data:image/png;base64,${b64}`;
-    const out = await page.evaluate(async ({ dataUrl, maxW, quality }) => {
+    const fmt = it.out.endsWith('.png') ? 'image/png' : 'image/jpeg';
+    const out = await page.evaluate(async ({ dataUrl, maxW, quality, fmt }) => {
       const img = new Image();
       await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
       const scale = Math.min(1, maxW / img.width);
@@ -20,8 +21,8 @@ const fs = require('fs');
       const g = c.getContext('2d');
       g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
       g.drawImage(img, 0, 0, w, h);
-      return c.toDataURL('image/jpeg', quality);
-    }, { dataUrl, maxW: it.maxW, quality: it.quality });
+      return c.toDataURL(fmt, quality);
+    }, { dataUrl, maxW: it.maxW, quality: it.quality, fmt });
     const jpg = Buffer.from(out.split(',')[1], 'base64');
     fs.writeFileSync(it.out, jpg);
     console.log(`${it.out}: ${(buf.length/1024).toFixed(0)}KB -> ${(jpg.length/1024).toFixed(0)}KB`);
