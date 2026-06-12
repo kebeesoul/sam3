@@ -16,11 +16,41 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 /* ---------------- 저장 / 진행 상황 ---------------- */
 const SAVE_KEY = 'sam3-defense-save';
 function loadSave() {
-  try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || { cleared: -1, stars: {} }; }
-  catch { return { cleared: -1, stars: {} }; }
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { /* 무시 */ }
+  s = s || {};
+  return {
+    cleared: s.cleared ?? -1,
+    stars: s.stars || {},
+    heroXp: s.heroXp || {},        // 영웅별 누적 경험치
+    challenges: s.challenges || {}, // 스테이지별 도전 과제 달성 여부
+    muted: !!s.muted,
+  };
 }
 function persistSave() { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); }
 let save = loadSave();
+
+/* ---------------- 영웅 레벨 ---------------- */
+const HERO_MAX_LEVEL = 10;
+// 레벨 l → l+1 에 필요한 누적 경험치
+function xpForLevel(l) { return 50 * l * l; }
+function heroLevel(xp) {
+  let l = 1;
+  while (l < HERO_MAX_LEVEL && xp >= xpForLevel(l)) l++;
+  return l;
+}
+function heroStatMul(level) { return 1 + (level - 1) * 0.08; }
+
+/* ---------------- 도전 과제 ---------------- */
+const CHALLENGES = [
+  { id: 'perfect',  icon: '🛡️', name: '완벽 방어',  desc: '목숨을 하나도 잃지 않고 승리' },
+  { id: 'immortal', icon: '⚔️', name: '불사 영웅',  desc: '영웅이 한 번도 쓰러지지 않고 승리' },
+  { id: 'rush',     icon: '⏱️', name: '속전속결',  desc: '모든 공세를 조기 소집하여 승리' },
+];
+
+// 터치 기기에서는 클릭 판정 반경을 넓힌다
+const COARSE = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
+const HIT_R = COARSE ? 32 : 22;
 
 /* ---------------- 게임 상태 ---------------- */
 let G = null;          // 현재 스테이지 런타임 상태
@@ -48,6 +78,8 @@ function newGameState(stage) {
     won: false,
     time: 0,
     shake: 0,
+    heroDeaths: 0,
+    earlyCalls: 0,
   };
 }
 
@@ -130,13 +162,39 @@ function nearestPathPoint(x, y) {
 function spawnHero(heroId) {
   const def = HEROES[heroId];
   const start = pointAt(G.stage.path, pathLength(G.stage.path) * 0.65);
+  const xp = save.heroXp[heroId] || 0;
+  const level = heroLevel(xp);
+  const mul = heroStatMul(level);
   G.hero = {
     kind: 'hero', def,
-    hp: def.hp, maxHp: def.hp,
+    level, xp,
+    maxHp: Math.round(def.hp * mul), hp: Math.round(def.hp * mul),
+    dmgScaled: [def.dmg[0] * mul, def.dmg[1] * mul],
+    ultMul: 1 + (level - 1) * 0.06,
     x: start.x, y: start.y - 40, tx: start.x, ty: start.y - 40,
     target: null, atkCd: 0,
     ultCd: 0, dead: false, respawnT: 0,
   };
+}
+
+function gainHeroXp(amount) {
+  const h = G.hero;
+  if (!h || amount <= 0) return;
+  const before = h.level;
+  h.xp += amount;
+  const after = heroLevel(h.xp);
+  if (after > before) {
+    h.level = after;
+    const mul = heroStatMul(after);
+    h.maxHp = Math.round(h.def.hp * mul);
+    h.hp = h.maxHp; // 레벨업 시 완전 회복
+    h.dmgScaled = [h.def.dmg[0] * mul, h.def.dmg[1] * mul];
+    h.ultMul = 1 + (after - 1) * 0.06;
+    addFloater(h.x, h.y - 36, `LEVEL UP! Lv.${after}`, '#ffd700', 18);
+    addEffect('ring', h.x, h.y, 0.6, { radius: 60, color: '#ffd700' });
+    AudioSys.play('levelup');
+  }
+  save.heroXp[h.def.id] = h.xp;
 }
 
 /* ---------------- 전투 처리 ---------------- */
@@ -152,9 +210,16 @@ function dealDamage(enemy, amount, opts = {}) {
     G.gold += enemy.bounty;
     addFloater(enemy.x, enemy.y, `+${enemy.bounty}`, '#ffd700');
     addEffect('poof', enemy.x, enemy.y, 0.4);
+    AudioSys.play('coin', 120);
+    // 영웅 경험치: 근처에서 잡으면 전액, 멀면 30% (부대 지원 몫)
+    if (G.hero) {
+      const near = !G.hero.dead && dist(G.hero, enemy) < 220;
+      gainHeroXp(Math.max(1, Math.round(enemy.bounty * (near ? 1 : 0.3))));
+    }
     if (enemy.isBoss) {
       addFloater(enemy.x, enemy.y - 20, `${enemy.name} 격파!`, '#ff6b6b', 22);
       G.shake = 0.5;
+      AudioSys.play('boom');
     }
   }
 }
@@ -216,6 +281,7 @@ function startNextWave() {
   queueWave(G.waveIdx);
   G.waveTimer = 999;
   addFloater(W / 2, 80, `${G.waveIdx + 1}번째 공세!`, '#fff', 26);
+  AudioSys.play('horn');
   updateHUD();
 }
 
@@ -260,6 +326,7 @@ function updateEnemies(dt) {
       e.escaped = true; e.dead = true;
       G.lives -= e.livesCost;
       addFloater(e.x, e.y, `-${e.livesCost} ❤️`, '#ff5555', 16);
+      AudioSys.play('life');
       if (G.lives <= 0) { loseStage(); return; }
     }
   }
@@ -307,7 +374,11 @@ function killAlly(a) {
   a.respawnT = a.kind === 'hero' ? a.def.respawn : TOWER_TYPES.barracks.levels[a.tower.level].respawn;
   for (const e of G.enemies) if (e.blocker === a) e.blocker = null;
   addEffect('poof', a.x, a.y, 0.4);
-  if (a.kind === 'hero') addFloater(a.x, a.y, `${a.def.name} 부상! 후방 치료 중...`, '#aaa', 14);
+  if (a.kind === 'hero') {
+    G.heroDeaths++;
+    AudioSys.play('heroDie');
+    addFloater(a.x, a.y, `${a.def.name} 부상! 후방 치료 중...`, '#aaa', 14);
+  }
 }
 
 function updateTowers(dt) {
@@ -329,6 +400,7 @@ function updateTowers(dt) {
     if (best) {
       t.cooldown = lv.rate;
       fireProjectile(t, best, lv);
+      AudioSys.play(lv.proj, 70);
     }
   }
 }
@@ -417,14 +489,14 @@ function updateHero(dt) {
       for (const e of G.enemies) if (!e.dead && dist(h, e) <= h.def.range && (!best || e.progress > best.progress)) best = e;
       if (best) {
         h.atkCd = 1.0;
-        dealDamage(best, rollDmg(h.def.dmg), { magic: h.def.magic });
+        dealDamage(best, rollDmg(h.dmgScaled), { magic: h.def.magic });
         addEffect('bolt', best.x, best.y, 0.25);
       }
     }
   } else {
     h.homeOff = 0;
+    h.dmg = h.dmgScaled;
     combatUnit(h, { x: h.tx, y: h.ty }, 90, h.def.speed, dt);
-    h.dmg = h.def.dmg;
   }
   updateUltBtn();
 }
@@ -436,14 +508,16 @@ function castUlt() {
   h.ultCd = u.cd;
   addFloater(h.x, h.y - 30, u.name + '!!', '#ffd700', 20);
   G.shake = 0.35;
+  AudioSys.play('ult');
+  const ultDmg = u.dmg * h.ultMul;
   switch (u.type) {
     case 'aoe':
       addEffect('ring', h.x, h.y, 0.5, { radius: u.radius, color: h.def.color });
-      for (const e of G.enemies) if (!e.dead && dist(h, e) <= u.radius) dealDamage(e, u.dmg, { magic: true, stun: u.stun });
+      for (const e of G.enemies) if (!e.dead && dist(h, e) <= u.radius) dealDamage(e, ultDmg, { magic: true, stun: u.stun });
       break;
     case 'globalStun':
       addEffect('roar', h.x, h.y, 0.7);
-      for (const e of G.enemies) if (!e.dead) dealDamage(e, u.dmg, { magic: true, stun: u.stun });
+      for (const e of G.enemies) if (!e.dead) dealDamage(e, ultDmg, { magic: true, stun: u.stun });
       break;
     case 'charge': {
       // 진행방향: 가장 가까운 적 무리 쪽으로
@@ -457,7 +531,7 @@ function castUlt() {
         // 선분과의 거리
         const t = clamp(((e.x - h.x) * (ex - h.x) + (e.y - h.y) * (ey - h.y)) / (u.length * u.length), 0, 1);
         const px = h.x + (ex - h.x) * t, py = h.y + (ey - h.y) * t;
-        if (Math.hypot(e.x - px, e.y - py) < 40) dealDamage(e, u.dmg, { magic: true, stun: 0.5 });
+        if (Math.hypot(e.x - px, e.y - py) < 40) dealDamage(e, ultDmg, { magic: true, stun: 0.5 });
       }
       h.x = clamp(ex, 20, W - 20); h.y = clamp(ey, 20, H - 20);
       h.tx = h.x; h.ty = h.y;
@@ -471,7 +545,7 @@ function castUlt() {
         if (n > bestN) { bestN = n; cx = e.x; cy = e.y; }
       }
       addEffect('fireRain', cx, cy, 1.0, { radius: u.radius });
-      for (const e of G.enemies) if (!e.dead && dist({ x: cx, y: cy }, e) <= u.radius) dealDamage(e, u.dmg, { magic: true, burn: u.burn });
+      for (const e of G.enemies) if (!e.dead && dist({ x: cx, y: cy }, e) <= u.radius) dealDamage(e, ultDmg, { magic: true, burn: u.burn });
       break; }
   }
   updateUltBtn();
@@ -488,6 +562,7 @@ function updateProjectiles(dt) {
       const lv = p.lvDef;
       if (lv.splash) {
         addEffect('boom', tgt.x, tgt.y, 0.35, { radius: lv.splash });
+        AudioSys.play('boom', 150);
         for (const e of G.enemies) if (!e.dead && dist(tgt, e) <= lv.splash) dealDamage(e, rollDmg(lv.dmg), { magic: lv.magic });
       } else {
         dealDamage(tgt, rollDmg(lv.dmg), { magic: lv.magic, burn: lv.burn });
@@ -505,20 +580,39 @@ function updateProjectiles(dt) {
 function winStage() {
   if (G.over) return;
   G.over = true; G.won = true;
+  AudioSys.stopBgm();
+  AudioSys.play('win');
   const stars = G.lives >= 18 ? 3 : G.lives >= 10 ? 2 : 1;
   const sid = G.stage.id;
   save.cleared = Math.max(save.cleared, sid);
   save.stars[sid] = Math.max(save.stars[sid] || 0, stars);
+  // 도전 과제 판정
+  const ch = save.challenges[sid] || {};
+  G.newlyDone = [];
+  if (G.lives >= G.stage.lives) { if (!ch.perfect) G.newlyDone.push('perfect'); ch.perfect = true; }
+  if (G.heroDeaths === 0)       { if (!ch.immortal) G.newlyDone.push('immortal'); ch.immortal = true; }
+  if (G.earlyCalls >= G.stage.waves.length) { if (!ch.rush) G.newlyDone.push('rush'); ch.rush = true; }
+  save.challenges[sid] = ch;
+  if (G.hero) save.heroXp[G.hero.def.id] = G.hero.xp;
   persistSave();
   setTimeout(() => showOutro(G.stage, stars), 600);
 }
 function loseStage() {
   if (G.over) return;
   G.over = true; G.won = false;
+  AudioSys.stopBgm();
+  AudioSys.play('lose');
+  // 패배해도 쌓은 경험치의 절반은 보존
+  if (G.hero) {
+    const prev = save.heroXp[G.hero.def.id] || 0;
+    save.heroXp[G.hero.def.id] = Math.max(prev, prev + Math.floor((G.hero.xp - prev) / 2));
+    persistSave();
+  }
   setTimeout(() => {
     $('#result-title').textContent = '패배...';
     $('#result-stars').textContent = '💀';
     $('#result-msg').textContent = '본진이 함락되었습니다. 다시 도전하십시오!';
+    $('#result-challenges').innerHTML = '';
     $('#btn-result-next').style.display = 'none';
     showOverlay('result');
   }, 600);
@@ -714,7 +808,7 @@ function drawAllies() {
     ctx.font = '22px serif'; ctx.textAlign = 'center';
     ctx.fillText(h.def.icon, h.x, h.y + 6);
     ctx.font = 'bold 11px sans-serif'; ctx.fillStyle = '#fff';
-    ctx.fillText(h.def.name, h.x, h.y - 24);
+    ctx.fillText(`${h.def.name} Lv.${h.level}`, h.x, h.y - 24);
     drawHpBar(h.x, h.y - 18, 34, h.hp / h.maxHp, '#3498db');
     // 이동 목적지
     if (Math.hypot(h.tx - h.x, h.ty - h.y) > 8) {
@@ -921,7 +1015,7 @@ function openBuildMenu(idx) {
   menu.style.top = clamp(t.y * scaleY + rect.top - menu.offsetHeight - 30, 8, window.innerHeight - 60) + 'px';
 }
 function closeBuildMenu() {
-  G.selected = null;
+  if (G) G.selected = null;
   $('#build-menu').style.display = 'none';
 }
 
@@ -938,6 +1032,7 @@ canvas.addEventListener('click', (ev) => {
     if (x > W / 2 - 150 && x < W / 2 + 150 && y > 14 && y < 48) {
       const bonus = Math.floor(G.waveTimer * 2);
       if (bonus > 0) { G.gold += bonus; addFloater(W / 2, 70, `조기 출전 보너스 +${bonus}`, '#ffd700', 15); }
+      G.earlyCalls++;
       startNextWave();
       return;
     }
@@ -945,7 +1040,7 @@ canvas.addEventListener('click', (ev) => {
 
   // 영웅 클릭 → 선택
   const h = G.hero;
-  if (h && !h.dead && Math.hypot(h.x - x, h.y - y) < 22) {
+  if (h && !h.dead && Math.hypot(h.x - x, h.y - y) < HIT_R) {
     heroSelected = !heroSelected;
     closeBuildMenu();
     addFloater(h.x, h.y - 30, heroSelected ? '이동 지점을 클릭' : '대기', '#fff', 13);
@@ -961,7 +1056,7 @@ canvas.addEventListener('click', (ev) => {
   // 건설부지 / 타워 클릭
   for (let i = 0; i < G.towers.length; i++) {
     const t = G.towers[i];
-    if (Math.hypot(t.x - x, t.y - y) < 22) {
+    if (Math.hypot(t.x - x, t.y - y) < HIT_R) {
       openBuildMenu(i);
       return;
     }
@@ -1004,9 +1099,10 @@ function showHeroSelect(stage) {
     const locked = hd.unlockStage > save.cleared + 1 || hd.unlockStage > stage.id;
     const card = document.createElement('div');
     card.className = 'hero-card' + (locked ? ' locked' : '');
+    const lv = heroLevel(save.heroXp[id] || 0);
     card.innerHTML = `
       <div class="hc-icon" style="border-color:${hd.color}">${locked ? '🔒' : hd.icon}</div>
-      <div class="hc-name">${hd.name}</div>
+      <div class="hc-name">${hd.name} <span class="hc-lv">Lv.${lv}</span></div>
       <div class="hc-title">${hd.title}</div>
       <div class="hc-ult">${hd.ult.icon} ${hd.ult.name}</div>
       <div class="hc-desc">${locked ? `스테이지 ${hd.unlockStage + 1} 클리어 후 해금` : hd.ult.desc}</div>`;
@@ -1028,6 +1124,7 @@ function startStage(stage, heroId) {
   heroSelected = false;
   G.speed = 1;
   $('#btn-speed').textContent = '▶ x1';
+  AudioSys.startBgm();
   updateHUD();
   updateUltBtn();
 }
@@ -1039,6 +1136,7 @@ function showOutro(stage, stars) {
     $('#result-msg').textContent = stage.id >= STAGES.length - 1
       ? '모든 스테이지를 클리어했습니다! 유비는 한중왕에 올랐습니다. 천하통일의 꿈은 계속됩니다...'
       : `${stage.name} 클리어! 다음 전장이 기다립니다.`;
+    renderResultChallenges(stage.id);
     $('#btn-result-next').style.display = stage.id >= STAGES.length - 1 ? 'none' : 'inline-block';
     showOverlay('result');
   });
@@ -1046,6 +1144,7 @@ function showOutro(stage, stars) {
 
 function showStageMap() {
   screen = 'map';
+  AudioSys.stopBgm();
   G = null;
   $('#hud').style.display = 'none';
   closeBuildMenu();
@@ -1062,7 +1161,10 @@ function showStageMap() {
         <div class="sc-name">${locked ? '???' : st.name}</div>
         <div class="sc-sub">${locked ? '이전 전투를 승리하세요' : st.subtitle}</div>
       </div>
-      <div class="sc-stars">${stars ? '⭐'.repeat(stars) : (locked ? '🔒' : '')}</div>`;
+      <div class="sc-right">
+        <div class="sc-stars">${stars ? '⭐'.repeat(stars) : (locked ? '🔒' : '')}</div>
+        <div class="sc-badges">${locked ? '' : CHALLENGES.map(c => `<span class="${(save.challenges[st.id] || {})[c.id] ? 'on' : 'off'}" title="${c.name}: ${c.desc}">${c.icon}</span>`).join('')}</div>
+      </div>`;
     if (!locked) {
       card.onclick = () => showDialogue(st.intro, () => showHeroSelect(st));
     }
@@ -1071,7 +1173,27 @@ function showStageMap() {
   showOverlay('stage-map');
 }
 
+function renderResultChallenges(sid) {
+  const ch = save.challenges[sid] || {};
+  $('#result-challenges').innerHTML = '<div class="ch-title">도전 과제</div>' + CHALLENGES.map(c => {
+    const done = !!ch[c.id];
+    const isNew = G && G.newlyDone && G.newlyDone.includes(c.id);
+    return `<div class="ch-item ${done ? 'done' : ''}">${c.icon} ${c.name}${isNew ? ' <b>NEW!</b>' : ''}<span class="ch-desc">${c.desc}</span></div>`;
+  }).join('');
+}
+
 /* ---------------- 버튼 바인딩 ---------------- */
+AudioSys.setMuted(save.muted);
+function syncSoundBtn() { $('#btn-sound').textContent = AudioSys.muted ? '🔇' : '🔊'; }
+syncSoundBtn();
+$('#btn-sound').onclick = () => {
+  save.muted = !save.muted;
+  AudioSys.setMuted(save.muted);
+  persistSave();
+  syncSoundBtn();
+};
+document.addEventListener('pointerdown', () => AudioSys.unlock(), { passive: true });
+
 $('#btn-start').onclick = () => showStageMap();
 $('#btn-ult').onclick = (e) => { e.stopPropagation(); castUlt(); };
 $('#btn-speed').onclick = () => {
@@ -1095,6 +1217,7 @@ $('#btn-hero-back').onclick = () => showStageMap();
 window.addEventListener('keydown', (e) => {
   if (!G || screen !== 'game') return;
   if (e.key === 'q' || e.key === 'Q' || e.key === ' ') { e.preventDefault(); castUlt(); }
+  if (e.key === 'm' || e.key === 'M') $('#btn-sound').onclick();
   if (e.key === 'Escape') closeBuildMenu();
 });
 
