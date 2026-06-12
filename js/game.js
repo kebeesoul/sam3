@@ -109,8 +109,8 @@ function pointAt(path, d) {
 function makeEnemy(typeId) {
   const base = ENEMY_TYPES[typeId] || BOSS_TYPES[typeId];
   const isBoss = !!BOSS_TYPES[typeId];
-  // 스테이지 진행에 따른 약간의 체력 보정 (보스는 스테이지별로 이미 튜닝됨)
-  const hpScale = isBoss ? 1 : 1 + G.stage.id * 0.03;
+  // 난이도 보정: 일반 적은 스테이지 비례 강화, 보스는 일괄 강화
+  const hpScale = isBoss ? 1.25 : 1.08 + G.stage.id * 0.07;
   return {
     typeId, ...base,
     isBoss,
@@ -358,7 +358,7 @@ function updateBossSkill(e, dt) {
       break; }
     case 'huaXiong': case 'xiahouYuan': { // 강타
       if (e.blocker && !e.blocker.dead) { e.blocker.hp -= 80; addEffect('slash', e.blocker.x, e.blocker.y, 0.3); if (e.blocker.hp <= 0) killAlly(e.blocker); }
-      if (e.typeId === 'xiahouYuan') { e.slow = 0; e.progress += 40; }
+      if (e.typeId === 'xiahouYuan') { e.slow = 0; e.progress += 28; }
       break; }
     case 'caoRen': e.shielded = true; e.shieldT = 3; break;
     case 'lvBu': { // 주변 아군 일소
@@ -1186,10 +1186,16 @@ function showDialogue(lines, onDone) {
   showOverlay('dialogue');
   renderDlgLine();
 }
+const PORTRAIT_FILES = { '유비': 'liubei', '관우': 'guanyu', '장비': 'zhangfei', '조운': 'zhaoyun', '제갈량': 'zhugeliang', '조조': 'caocao', '도겸': 'taoqian' };
+const PORTRAIT_EMOJI = { '유비': '👑', '관우': '🟥', '장비': '🐍', '조운': '⚪', '제갈량': '🪶', '조조': '🧔', '도겸': '👴' };
+function portraitHtml(key, fallback) {
+  if (!key) return `<span class="pt-fb">${fallback}</span>`;
+  return `<img src="assets/img/portrait_${key}.png" alt="" onerror="this.outerHTML='<span class=&quot;pt-fb&quot;>${fallback}</span>'">`;
+}
+
 function renderDlgLine() {
   const [speaker, text] = dlg.lines[dlg.idx];
-  const portraits = { '유비': '👑', '관우': '🟥', '장비': '🐍', '조운': '⚪', '제갈량': '🪶', '조조': '🧔', '도겸': '👴' };
-  $('#dlg-portrait').textContent = portraits[speaker] || '🗣️';
+  $('#dlg-portrait').innerHTML = portraitHtml(PORTRAIT_FILES[speaker], PORTRAIT_EMOJI[speaker] || '🗣️');
   $('#dlg-speaker').textContent = speaker;
   $('#dlg-text').textContent = text;
   $('#dlg-progress').textContent = `${dlg.idx + 1} / ${dlg.lines.length}`;
@@ -1216,7 +1222,7 @@ function showHeroSelect(stage) {
     card.className = 'hero-card' + (locked ? ' locked' : '');
     const lv = heroLevel(save.heroXp[id] || 0);
     card.innerHTML = `
-      <div class="hc-icon" style="border-color:${hd.color}">${locked ? '🔒' : hd.icon}</div>
+      <div class="hc-icon" style="border-color:${hd.color}">${locked ? '<span class="pt-fb">🔒</span>' : portraitHtml(id, hd.icon)}</div>
       <div class="hc-name">${hd.name} <span class="hc-lv">Lv.${lv}</span></div>
       <div class="hc-title">${hd.title}</div>
       <div class="hc-ult">${hd.ult.icon} ${hd.ult.name}</div>
