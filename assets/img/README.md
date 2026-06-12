@@ -1,24 +1,15 @@
 # 일러스트 에셋
 
-UI는 아래 파일명을 참조하며, 파일이 없으면 자동으로 이모지/그라데이션 폴백으로 동작합니다.
+모든 에셋은 동일한 스타일 공식으로 생성되었으며, 파일이 없으면 게임은 이모지/절차 생성 그래픽으로 자동 폴백합니다.
+재취득은 `tools/*-manifest.json`의 URL을 받아 `tools/optimize.js`로 최적화하면 됩니다.
 
-| 파일 | 용도 |
+| 분류 | 파일 |
 |---|---|
-| `portrait_liubei.jpg` | 유비 초상화 (대화/영웅 선택) |
-| `portrait_guanyu.jpg` | 관우 초상화 |
-| `portrait_zhangfei.jpg` | 장비 초상화 |
-| `portrait_zhaoyun.jpg` | 조운 초상화 |
-| `portrait_zhugeliang.jpg` | 제갈량 초상화 |
-| `portrait_caocao.jpg` | 조조 초상화 (대화) |
-| `portrait_taoqian.jpg` | 도겸 초상화 (대화) |
-| `title_bg.jpg` | 타이틀 화면 배경 일러스트 (16:9) |
-| `map_bg.jpg` | 전장 지도/영웅 선택/결과 화면 배경 (16:9) |
-| `icon_archer.jpg` | 건설 메뉴 궁병탑 아이콘 (1:1) |
-| `icon_barracks.jpg` | 건설 메뉴 창병막사 아이콘 (1:1) |
-| `icon_catapult.jpg` | 건설 메뉴 투석기 아이콘 (1:1) |
-| `icon_fire.jpg` | 건설 메뉴 화공탑 아이콘 (1:1) |
-| `victory_bg.jpg` | 승리 결과 화면 배경 (16:9) |
-| `defeat_bg.jpg` | 패배 결과 화면 배경 (16:9) |
-
-15종 모두 Higgsfield 계정의 생성 기록(2026-06-12)에 동일한 스타일 공식으로 생성되어 있습니다.
-다운로드 후 위 파일명으로 이 폴더에 넣으면 즉시 적용됩니다.
+| UI 배경 | `title_bg.jpg`, `map_bg.jpg`, `victory_bg.jpg`, `defeat_bg.jpg` |
+| 초상화 | `portrait_{liubei,guanyu,zhangfei,zhaoyun,zhugeliang,caocao,taoqian}.jpg` |
+| 타워 아이콘 | `icon_{archer,barracks,catapult,fire}.jpg` |
+| 전투 타워 | `tower_{archer,barracks,catapult,fire}.png` |
+| 전투 유닛 | `unit_{yellowturban,infantry,archer,cavalry,siege,soldier,general}.png` |
+| 영웅 | `hero_{liubei,guanyu,zhangfei,zhaoyun,zhugeliang}.png` |
+| 지형 텍스처 | `tex_{grass,dirt,water}.png` (시임리스 타일) |
+| 지형 장식 | `deco_{pine,tree,bamboo,rock,hut,mountain,peak2,bush,gate,fortress,ship,grove}.png`, `deco_range_{snow,rock}.png` (와이드 산맥) |
