@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>삼국지 디펜스 - 유비전</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -17,6 +17,7 @@
     </div>
     <div class="hud-title" id="hud-stage"></div>
     <div class="hud-group">
+      <button class="hud-btn" id="btn-sound" title="음소거 (M)">🔊</button>
       <button class="hud-btn" id="btn-speed">▶ x1</button>
       <button class="hud-btn" id="btn-pause">⏸ 정지</button>
       <button class="hud-btn" id="btn-quit">🏳️ 포기</button>
@@ -83,6 +84,7 @@
       <h2 id="result-title">승리!</h2>
       <div id="result-stars">⭐⭐⭐</div>
       <p id="result-msg"></p>
+      <div id="result-challenges"></div>
       <div class="result-btns">
         <button class="big-btn" id="btn-result-next">다음 전투 ▸</button>
         <button class="small-btn" id="btn-result-retry">재도전</button>
@@ -92,6 +94,7 @@
   </div>
 </div>
 
+<script src="js/audio.js"></script>
 <script src="js/data.js"></script>
 <script src="js/game.js"></script>
 </body>

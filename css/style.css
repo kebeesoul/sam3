@@ -1,7 +1,11 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+html, body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
 body {
   background: #1a1410;
+  user-select: none;
+  -webkit-user-select: none;
   color: #f0e6d2;
   font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
   min-height: 100vh;
@@ -17,6 +21,7 @@ body {
 
 canvas#game {
   display: block;
+  touch-action: manipulation;
   width: 100%;
   aspect-ratio: 960 / 600;
   border: 3px solid #5a4628;
@@ -281,3 +286,45 @@ canvas#game {
 #result-stars { font-size: 40px; margin: 10px 0; }
 #result-msg { font-size: 14px; line-height: 1.6; color: #d8c8a8; margin-bottom: 16px; }
 .result-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; align-items: center; }
+
+
+/* ---------------- 영웅 레벨 / 도전 과제 ---------------- */
+.hc-lv { font-size: 11px; color: #ffd700; font-weight: normal; }
+.sc-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.sc-badges span { font-size: 13px; margin-left: 2px; }
+.sc-badges span.off { opacity: 0.22; filter: grayscale(1); }
+#result-challenges { margin-bottom: 14px; }
+.ch-title { color: #ffd700; font-size: 13px; font-weight: bold; margin-bottom: 6px; }
+.ch-item {
+  font-size: 13px;
+  color: #777;
+  padding: 3px 0;
+}
+.ch-item.done { color: #ffe9a8; }
+.ch-item b { color: #ff6b6b; }
+.ch-desc { font-size: 11px; color: #998866; margin-left: 8px; }
+
+/* ---------------- 모바일 최적화 ---------------- */
+@media (max-width: 720px) {
+  body { align-items: flex-start; }
+  #wrap { width: 100vw; }
+  canvas#game { border-left: none; border-right: none; border-radius: 0; }
+  #hud { flex-wrap: wrap; padding: 4px; }
+  .hud-item { font-size: 12px; padding: 3px 7px; }
+  .hud-title { font-size: 13px; width: 100%; order: -1; text-align: center; }
+  .hud-btn { font-size: 12px; padding: 6px 8px; }
+  #btn-ult { width: 86px; height: 86px; }
+  #btn-ult #ult-icon { font-size: 32px; }
+  .bm-btn { padding: 10px 8px; font-size: 14px; }
+  #build-menu { width: 210px; }
+  .panel { padding: 16px 14px; }
+  .title-panel h1 { font-size: 44px; }
+  .hero-card { width: 42%; min-width: 130px; }
+  .dlg-box { padding: 12px 14px; min-height: 110px; }
+  #dlg-portrait { font-size: 40px; width: 60px; height: 60px; }
+  #dlg-text { font-size: 13px; }
+  .map-panel { width: 94%; }
+  .stage-card { padding: 8px 10px; }
+  .sc-name { font-size: 14px; }
+  .big-btn { padding: 14px 36px; }
+}
