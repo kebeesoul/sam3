@@ -1,74 +1,8 @@
 [
  {
-  "name": "tex_grass",
-  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_223516_844e3c00-26b9-4b92-b82e-c0b33962020e.png",
-  "maxW": 512,
-  "quality": 0.9
- },
- {
-  "name": "tex_dirt",
-  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_223519_9493afc4-c76a-4a3e-85ce-64dc561e4dc2.png",
-  "maxW": 512,
-  "quality": 0.9
- },
- {
-  "name": "tex_water",
-  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_223522_5adcd9b0-d063-463f-90fe-459f59c1ce36.png",
-  "maxW": 512,
-  "quality": 0.9
- },
- {
-  "name": "deco_pine",
-  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_223915_51e12332-3be2-4788-b474-3fa5bcbeffa2.png",
-  "maxW": 256,
-  "quality": 0.92
- },
- {
-  "name": "deco_tree",
-  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_223921_20555b2e-b7c3-473d-9182-7ad5e47e5907.png",
-  "maxW": 256,
-  "quality": 0.92
- },
- {
-  "name": "deco_bamboo",
-  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_223924_1b95f515-aeb5-4a1b-8d82-129a69217541.png",
-  "maxW": 256,
-  "quality": 0.92
- },
- {
-  "name": "deco_rock",
-  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_223927_034d8b20-2f27-4cdb-a38e-89b28d839837.png",
-  "maxW": 256,
-  "quality": 0.92
- },
- {
-  "name": "deco_hut",
-  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_223930_aaef22a0-d032-48a9-acfa-cad9b0de956b.png",
-  "maxW": 256,
-  "quality": 0.92
- },
- {
-  "name": "deco_mountain",
-  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_223933_e73a8b45-98ed-4496-b0b5-f77e445db379.png",
-  "maxW": 384,
-  "quality": 0.92
- },
- {
-  "name": "deco_bush",
-  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_223936_97aa4922-f4cc-436a-9944-517ef95173e5.png",
-  "maxW": 224,
-  "quality": 0.92
- },
- {
-  "name": "deco_gate",
-  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_223938_fe872a47-8f61-4195-9f95-6bedd452a420.png",
+  "name": "deco_ship",
+  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_225528_3562eadb-343f-4137-b517-6e8318322474.png",
   "maxW": 320,
-  "quality": 0.92
- },
- {
-  "name": "deco_fortress",
-  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_223941_16587e90-9189-488f-9639-4b3f4b023849.png",
-  "maxW": 384,
   "quality": 0.92
  }
 ]
