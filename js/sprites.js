@@ -384,104 +384,206 @@ const Sprites = (() => {
     px(g, x, y - 44, 7, 1, '#e8c83a');
   }
 
+  /* 테마별 잔디 색조 필터 / 장식 구성 */
+  const THEME_TINT = {
+    plain: null,
+    forest: 'hue-rotate(12deg) brightness(0.9) saturate(1.1)',
+    mountain: 'saturate(0.72) brightness(0.96)',
+    river: 'hue-rotate(-8deg) saturate(1.05)',
+  };
+  const THEME_DECOS = {
+    plain:    [['deco_tree', 56], ['deco_bush', 32], ['deco_rock', 38], ['deco_hut', 58], ['deco_tree', 50], ['deco_bush', 30]],
+    forest:   [['deco_pine', 68], ['deco_tree', 56], ['deco_bamboo', 52], ['deco_pine', 60], ['deco_rock', 36], ['deco_bush', 30]],
+    mountain: [['deco_mountain', 120], ['deco_pine', 62], ['deco_rock', 42], ['deco_rock', 34], ['deco_pine', 54], ['deco_bush', 28]],
+    river:    [['deco_bamboo', 54], ['deco_tree', 52], ['deco_rock', 36], ['deco_bush', 30], ['deco_bamboo', 46], ['deco_hut', 54]],
+  };
+
+  function texturesReadyKey() {
+    let k = '';
+    for (const n of ['tex_grass', 'tex_dirt', 'tex_water']) k += TerrainTex.ready(n) ? '1' : '0';
+    for (const n of ['deco_pine', 'deco_tree', 'deco_bamboo', 'deco_rock', 'deco_hut', 'deco_mountain', 'deco_bush', 'deco_gate', 'deco_fortress']) {
+      k += (typeof SpriteImages !== 'undefined' && SpriteImages.variant(n, null)) ? '1' : '0';
+    }
+    return k;
+  }
+  let terrainReadyKey = '';
+
+  function strokePathOn(g, path, wd, col) {
+    g.strokeStyle = col; g.lineWidth = wd;
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    g.beginPath(); g.moveTo(path[0][0], path[0][1]);
+    for (let i = 1; i < path.length; i++) g.lineTo(path[i][0], path[i][1]);
+    g.stroke();
+  }
+
+  function drawDecoSprite(g, name, x, y, h, flip) {
+    const img = SpriteImages.variant(name, null);
+    if (!img) return false;
+    const sc = h / img.height;
+    const w = img.width * sc;
+    // 그림자
+    g.fillStyle = 'rgba(20,30,10,0.28)';
+    g.beginPath(); g.ellipse(x, y + 2, w * 0.34, w * 0.13, 0, 0, Math.PI * 2); g.fill();
+    g.save();
+    g.translate(x, y);
+    if (flip) g.scale(-1, 1);
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(img, -w / 2, -h, w, h);
+    g.restore();
+    return true;
+  }
+
   function terrain(stage, pathPts) {
-    if (terrainStageId === stage.id && terrainCache) return terrainCache;
+    const readyKey = texturesReadyKey();
+    if (terrainStageId === stage.id && terrainCache && terrainReadyKey === readyKey) return terrainCache;
     terrainStageId = stage.id;
+    terrainReadyKey = readyKey;
     const W = 960, H = 600;
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const g = c.getContext('2d');
     const rnd = mulberry32(stage.id * 7919 + 13);
     const th = stage.theme;
+    const path = stage.path;
 
-    // 1) 바닥: 두 톤 체커 + 노이즈 패치
-    g.fillStyle = th.ground;
-    g.fillRect(0, 0, W, H);
-    for (let i = 0; i < 1400; i++) {
-      const x = rnd() * W, y = rnd() * H, s = 3 + rnd() * 9;
-      g.fillStyle = rnd() > 0.5 ? 'rgba(255,255,240,0.035)' : 'rgba(0,20,0,0.05)';
-      g.fillRect(x, y, s, s * 0.6);
+    /* 1) 바닥: 잔디 텍스처 (테마 색조) — 없으면 기존 절차 생성 */
+    const grassPat = TerrainTex.pattern(g, 'tex_grass', 230, THEME_TINT[th.deco]);
+    if (grassPat) {
+      g.fillStyle = grassPat; g.fillRect(0, 0, W, H);
+    } else {
+      g.fillStyle = th.ground; g.fillRect(0, 0, W, H);
+      for (let i = 0; i < 1400; i++) {
+        const x = rnd() * W, y = rnd() * H, sz = 3 + rnd() * 9;
+        g.fillStyle = rnd() > 0.5 ? 'rgba(255,255,240,0.035)' : 'rgba(0,20,0,0.05)';
+        g.fillRect(x, y, sz, sz * 0.6);
+      }
     }
     // 큰 명암 패치 (지형 입체감)
-    for (let i = 0; i < 14; i++) {
-      const x = rnd() * W, y = rnd() * H, r = 60 + rnd() * 120;
+    for (let i = 0; i < 16; i++) {
+      const x = rnd() * W, y = rnd() * H, r = 60 + rnd() * 130;
       const pg = g.createRadialGradient(x, y, 0, x, y, r);
-      const tint = rnd() > 0.5 ? '255,250,210' : '10,40,20';
+      const tint = rnd() > 0.5 ? '255,250,200' : '5,35,15';
       pg.addColorStop(0, `rgba(${tint},0.10)`);
       pg.addColorStop(1, `rgba(${tint},0)`);
       g.fillStyle = pg;
       g.beginPath(); g.ellipse(x, y, r, r * 0.6, 0, 0, Math.PI * 2); g.fill();
     }
-    // 들꽃
-    for (let i = 0; i < 70; i++) {
-      const x = rnd() * W, y = rnd() * H;
-      g.fillStyle = ['#e8c84a', '#e87a6a', '#f0f0e0', '#c87ae0'][Math.floor(rnd() * 4)];
-      g.fillRect(x, y, 2, 2);
-      g.fillStyle = 'rgba(20,60,20,0.5)';
-      g.fillRect(x, y + 2, 1, 3);
-    }
-    // 풀 무늬
-    g.fillStyle = 'rgba(0,40,0,0.12)';
-    for (let i = 0; i < 320; i++) {
-      const x = rnd() * W, y = rnd() * H;
-      g.fillRect(x, y, 2, 4); g.fillRect(x + 3, y + 1, 2, 3);
-    }
-    // 강 테마: 화면 가장자리 물
+
+    /* 2) 강 테마: 물 텍스처 가장자리 */
     if (th.deco === 'river') {
-      const grad = g.createLinearGradient(0, H - 90, 0, H);
-      grad.addColorStop(0, 'rgba(30,90,130,0)');
-      grad.addColorStop(1, 'rgba(30,90,130,0.55)');
-      g.fillStyle = grad; g.fillRect(0, H - 90, W, 90);
-      g.fillStyle = 'rgba(180,220,240,0.25)';
-      for (let i = 0; i < 40; i++) g.fillRect(rnd() * W, H - 60 + rnd() * 55, 10 + rnd() * 18, 2);
+      const waterPat = TerrainTex.pattern(g, 'tex_water', 240);
+      g.save();
+      g.beginPath();
+      g.moveTo(0, H - 78);
+      for (let x = 0; x <= W; x += 40) g.quadraticCurveTo(x + 20, H - 78 + (((x / 40) % 2) ? 12 : -6), x + 40, H - 78);
+      g.lineTo(W, H); g.lineTo(0, H); g.closePath();
+      if (waterPat) { g.fillStyle = waterPat; g.globalAlpha = 0.92; g.fill(); g.globalAlpha = 1; }
+      else { g.fillStyle = 'rgba(40,100,140,0.6)'; g.fill(); }
+      g.restore();
+      g.strokeStyle = 'rgba(230,240,235,0.5)'; g.lineWidth = 2.5;
+      g.beginPath();
+      g.moveTo(0, H - 78);
+      for (let x = 0; x <= W; x += 40) g.quadraticCurveTo(x + 20, H - 78 + (((x / 40) % 2) ? 12 : -6), x + 40, H - 78);
+      g.stroke();
     }
 
-    // 2) 길
-    const path = stage.path;
-    g.lineCap = 'round'; g.lineJoin = 'round';
-    const stroke = (wd, col) => {
-      g.strokeStyle = col; g.lineWidth = wd;
-      g.beginPath(); g.moveTo(path[0][0], path[0][1]);
-      for (let i = 1; i < path.length; i++) g.lineTo(path[i][0], path[i][1]);
-      g.stroke();
-    };
-    stroke(50, 'rgba(0,0,0,0.25)');
-    stroke(44, shade(th.path.startsWith('#') ? th.path : '#c2a878', -35));
-    stroke(38, th.path);
-    stroke(26, shade(th.path.startsWith('#') ? th.path : '#c2a878', 12));
-    // 자갈/바퀴자국
+    /* 3) 길: 흙 텍스처를 마스크로 깔고 가장자리 디테일 */
+    strokePathOn(g, path, 56, 'rgba(30,22,8,0.30)'); // 부드러운 외곽 음영
+    strokePathOn(g, path, 49, 'rgba(58,42,20,0.55)'); // 진한 테두리
+    const dirtPat = TerrainTex.pattern(g, 'tex_dirt', 240);
+    if (dirtPat) {
+      const m = document.createElement('canvas');
+      m.width = W; m.height = H;
+      const mg = m.getContext('2d');
+      strokePathOn(mg, path, 44, '#fff');
+      mg.globalCompositeOperation = 'source-in';
+      mg.fillStyle = TerrainTex.pattern(mg, 'tex_dirt', 240);
+      mg.fillRect(0, 0, W, H);
+      g.drawImage(m, 0, 0);
+    } else {
+      strokePathOn(g, path, 44, th.path);
+      strokePathOn(g, path, 28, shade(th.path.startsWith('#') ? th.path : '#c2a878', 12));
+    }
+    // 닳은 중앙 자국 + 수레바퀴 홈
+    strokePathOn(g, path, 13, 'rgba(255,238,190,0.10)');
+    strokePathOn(g, path, 30, 'rgba(60,40,15,0.07)');
+    // 길가 디테일: 자갈, 풀 돋움
     for (const p of pathPts) {
-      if (rnd() < 0.4) {
-        g.fillStyle = `rgba(90,70,40,${0.15 + rnd() * 0.2})`;
-        g.fillRect(p.x + (rnd() - 0.5) * 22, p.y + (rnd() - 0.5) * 22, 3 + rnd() * 3, 2 + rnd() * 2);
+      if (rnd() < 0.55) {
+        const a = rnd() * Math.PI * 2, d = 14 + rnd() * 9;
+        g.fillStyle = `rgba(${100 + rnd() * 40 | 0},${80 + rnd() * 30 | 0},${50 + rnd() * 20 | 0},${0.4 + rnd() * 0.3})`;
+        g.beginPath(); g.ellipse(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, 1.6 + rnd() * 1.8, 1.1 + rnd() * 1.2, rnd() * 3, 0, Math.PI * 2); g.fill();
+      }
+      if (rnd() < 0.3) {
+        const side = rnd() > 0.5 ? 1 : -1;
+        const a = rnd() * Math.PI * 2;
+        const gx = p.x + Math.cos(a) * 24 * side, gy = p.y + Math.sin(a) * 24 * side;
+        g.strokeStyle = `rgba(60,${110 + rnd() * 40 | 0},45,0.55)`;
+        g.lineWidth = 1.4;
+        for (let b = 0; b < 3; b++) {
+          g.beginPath();
+          g.moveTo(gx + b * 2 - 2, gy + 2);
+          g.quadraticCurveTo(gx + b * 2 - 2 + (rnd() - 0.5) * 3, gy - 3, gx + b * 2 - 3 + (rnd() - 0.5) * 4, gy - 6 - rnd() * 3);
+          g.stroke();
+        }
       }
     }
 
-    // 3) 장식
-    const decos = {
-      plain:    ['round', 'tuft', 'rock', 'hut', 'tuft', 'round', 'tuft'],
-      forest:   ['pine', 'round', 'pine', 'tuft', 'rock', 'pine', 'bamboo'],
+    /* 4) 장식: 일러스트 스프라이트 (없으면 절차 생성 폴백) */
+    const decos = THEME_DECOS[th.deco] || THEME_DECOS.plain;
+    const fallback = {
+      plain: ['round', 'tuft', 'rock', 'hut', 'tuft', 'round', 'tuft'],
+      forest: ['pine', 'round', 'pine', 'tuft', 'rock', 'pine', 'bamboo'],
       mountain: ['mtn', 'pine', 'rock', 'rock', 'pine', 'tuft', 'mtn'],
-      river:    ['reed', 'round', 'reed', 'rock', 'tuft', 'bamboo', 'reed'],
+      river: ['reed', 'round', 'reed', 'rock', 'tuft', 'bamboo', 'reed'],
     }[th.deco] || ['tuft'];
-    const clearOf = (x, y) =>
-      !stage.spots.some(s => Math.hypot(s[0] - x, s[1] - y) < 46) &&
-      !pathPts.some(p => Math.hypot(p.x - x, p.y - y) < 42);
-    let placed = 0, tries = 0;
-    while (placed < 44 && tries < 520) {
+    const clearOf = (x, y, r) =>
+      !stage.spots.some(sp => Math.hypot(sp[0] - x, sp[1] - y) < r + 30) &&
+      !pathPts.some(p => Math.hypot(p.x - x, p.y - y) < r + 26);
+    const placed = [];
+    let tries = 0;
+    // 가장자리에 큰 장식(산/숲) 우선 배치
+    while (placed.length < 14 && tries < 260) {
       tries++;
-      const x = 20 + rnd() * (W - 40), y = 30 + rnd() * (H - 40);
-      if (!clearOf(x, y)) continue;
-      drawTree(g, x, y, 0, decos[Math.floor(rnd() * decos.length)]);
-      placed++;
+      const edge = Math.floor(rnd() * 4);
+      const x = edge === 0 ? 16 + rnd() * 70 : edge === 1 ? W - 16 - rnd() * 70 : 20 + rnd() * (W - 40);
+      const y = edge === 2 ? 22 + rnd() * 60 : edge === 3 ? H - 14 - rnd() * 55 : 30 + rnd() * (H - 60);
+      if (!clearOf(x, y, 22)) continue;
+      const [name, hh] = decos[Math.floor(rnd() * 2)]; // 테마 대표 장식
+      placed.push({ name, x, y, h: hh * (0.85 + rnd() * 0.45), flip: rnd() > 0.5 });
+    }
+    // 내부 산포
+    tries = 0;
+    while (placed.length < 52 && tries < 600) {
+      tries++;
+      const x = 20 + rnd() * (W - 40), y = 30 + rnd() * (H - 44);
+      if (!clearOf(x, y, 14)) continue;
+      const [name, hh] = decos[Math.floor(rnd() * decos.length)];
+      placed.push({ name, x, y, h: hh * (0.7 + rnd() * 0.55), flip: rnd() > 0.5 });
+    }
+    placed.sort((a, b) => a.y - b.y);
+    let fbIdx = 0;
+    for (const d of placed) {
+      if (!drawDecoSprite(g, d.name, d.x, d.y, d.h, d.flip)) {
+        drawTree(g, d.x, d.y, 0, fallback[(fbIdx++) % fallback.length]);
+      }
+    }
+    // 들꽃 (잔디 위 점묘)
+    for (let i = 0; i < 64; i++) {
+      const x = rnd() * W, y = rnd() * H;
+      if (pathPts.some(p => Math.hypot(p.x - x, p.y - y) < 26)) continue;
+      g.fillStyle = ['#e8c84a', '#e87a6a', '#f0f0e0', '#c87ae0'][Math.floor(rnd() * 4)];
+      g.fillRect(x, y, 2, 2);
     }
 
-    // 4) 출발 군문 / 도착 요새
+    /* 5) 출발 군문 / 도착 요새 (일러스트 우선) */
     const s0 = path[0], e0 = path[path.length - 1];
-    drawGate(g, Math.max(34, Math.min(W - 34, s0[0])), Math.max(40, Math.min(H - 12, s0[1])));
-    drawFortress(g, Math.max(40, Math.min(W - 40, e0[0])), Math.max(50, Math.min(H - 16, e0[1])));
+    const gx = Math.max(40, Math.min(W - 40, s0[0])), gy = Math.max(54, Math.min(H - 8, s0[1] + 26));
+    const fx = Math.max(50, Math.min(W - 50, e0[0])), fy = Math.max(64, Math.min(H - 8, e0[1] + 30));
+    if (!drawDecoSprite(g, 'deco_gate', gx, gy, 86, false)) drawGate(g, gx, gy - 26);
+    if (!drawDecoSprite(g, 'deco_fortress', fx, fy, 104, false)) drawFortress(g, fx, fy - 30);
 
-    // 5) 비네트
+    /* 6) 비네트 */
     const v = g.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 0.95);
     v.addColorStop(0, 'rgba(0,0,0,0)');
     v.addColorStop(1, 'rgba(10,5,0,0.34)');
@@ -497,6 +599,44 @@ const Sprites = (() => {
 })();
 
 /* ============================================================
+   지형 텍스처 로더 (잔디/흙길/물 — 시임리스 타일 패턴)
+   ============================================================ */
+const TerrainTex = (() => {
+  const NAMES = ['tex_grass', 'tex_dirt', 'tex_water'];
+  const store = {};
+  const patCache = new Map();
+  const hasImage = typeof Image !== 'undefined';
+  for (const name of NAMES) {
+    if (!hasImage) { store[name] = { ready: false }; continue; }
+    const img = new Image();
+    const entry = { img, ready: false };
+    img.onload = () => { entry.ready = true; };
+    img.onerror = () => { entry.ready = false; };
+    img.src = `assets/img/${name}.png`;
+    store[name] = entry;
+  }
+  /* 타일 크기/필터 변형을 적용한 캔버스 패턴 */
+  function pattern(g, name, tile = 220, filter = null) {
+    const e = store[name];
+    if (!e || !e.ready) return null;
+    const key = `${name}|${tile}|${filter || ''}`;
+    let c = patCache.get(key);
+    if (!c) {
+      c = document.createElement('canvas');
+      c.width = tile; c.height = tile;
+      const cg = c.getContext('2d');
+      if (filter) cg.filter = filter;
+      cg.imageSmoothingEnabled = true;
+      cg.drawImage(e.img, 0, 0, tile, tile);
+      patCache.set(key, c);
+    }
+    return g.createPattern(c, 'repeat');
+  }
+  function ready(name) { const e = store[name]; return !!(e && e.ready); }
+  return { pattern, ready };
+})();
+
+/* ============================================================
    일러스트 스프라이트 로더 (assets/img/*.png, 없으면 픽셀아트 폴백)
    - 알파 바운딩박스를 계산해 여백을 자동 트림
    - hue-rotate 등 CSS 필터 변형을 오프스크린에 1회 렌더해 캐시
@@ -507,6 +647,8 @@ const SpriteImages = (() => {
     'unit_yellowturban', 'unit_infantry', 'unit_archer', 'unit_cavalry',
     'unit_siege', 'unit_soldier', 'unit_general',
     'hero_liubei', 'hero_guanyu', 'hero_zhangfei', 'hero_zhaoyun', 'hero_zhugeliang',
+    'deco_pine', 'deco_tree', 'deco_bamboo', 'deco_rock', 'deco_hut',
+    'deco_mountain', 'deco_bush', 'deco_gate', 'deco_fortress',
   ];
   const store = {};   // name -> { img, ready, bx, by, bw, bh }
   const varCache = new Map();
