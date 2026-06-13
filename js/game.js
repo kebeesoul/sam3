@@ -96,9 +96,9 @@ function placeSpots(paths, map, world) {
     return m;
   };
   const scale = WW / W; // 전장 확대 배수
-  const NEAR = 50, FAR = 120, MAXN = Math.min(14, Math.round(9 * scale)); // 큰 맵일수록 부지 더 많이
-  const GAP = 52;          // 부지 최소 간격(스프라이트 겹침 방지)
-  const CLUSTER = 78;      // 콤보용 군집 반경
+  const NEAR = 50, FAR = 124, MAXN = Math.min(14, Math.round(9 * scale)); // 큰 맵일수록 부지 더 많이
+  const GAP = 86;          // 부지 최소 간격 — 어떤 두 부지도 한 칸 이상 떨어지도록(겹침/밀착 방지)
+  const CLUSTER = 130;     // 콤보용 군집 반경(가깝되 붙지 않게)
   const cands = [];
   for (let y = 76; y <= WH - 60; y += 16) {
     for (let x = 44; x <= WW - 44; x += 16) {
@@ -828,12 +828,14 @@ function combatUnit(u, rally, engageRange, moveSpeed, dt, tower) {
     }
     if (best) { u.target = best; best.blocker = u; }
   }
+  u.moving = false;
   if (u.target) {
     const e = u.target;
     const d = dist(u, e);
     if (d > 20) {
       u.x += (e.x - u.x) / d * moveSpeed * dt;
       u.y += (e.y - u.y) / d * moveSpeed * dt;
+      u.moving = true;
     } else {
       u.atkCd -= dt;
       if (u.atkCd <= 0) {
@@ -856,7 +858,7 @@ function combatUnit(u, rally, engageRange, moveSpeed, dt, tower) {
     // 집결지로 복귀
     const hx = rally.x + Math.cos(u.homeOff || 0) * (u.anchorRad || 14), hy = rally.y + Math.sin(u.homeOff || 0) * (u.anchorRad || 14);
     const d = Math.hypot(hx - u.x, hy - u.y);
-    if (d > 4) { u.x += (hx - u.x) / d * moveSpeed * dt; u.y += (hy - u.y) / d * moveSpeed * dt; }
+    if (d > 4) { u.x += (hx - u.x) / d * moveSpeed * dt; u.y += (hy - u.y) / d * moveSpeed * dt; u.moving = true; }
   }
 }
 
@@ -1420,15 +1422,20 @@ function drawUnits() {
       const atkImg = attacking ? SpriteImages.variant(baseName + '_atk', filter) : null;
       const sImg = atkImg || SpriteImages.variant(baseName, filter);
       if (s.temp) drawGroundRing(s.x, s.y + 10, 16, 7, '#7bed9f', clamp(s.life / ABILITIES.reinf.life, 0.25, 1));
+      // 아군/적군 보병의 캐릭터 크기를 동일하게 (적 보병 기본과 같은 52)
+      const SOL_H = 52;
+      // 실제로 이동/교전 중일 때만 살짝 흔들리고, 대기 중엔 거의 정지 (깔끔한 대기)
+      const sMoving = !!s.moving;
       if (sImg) {
         if (attacking) {
           const k = clamp(1 - s.attackT / ENEMY_ATK_DUR, 0, 1);
-          drawIllust(sImg, s.x + Math.sin(k * Math.PI) * 8 * face, s.y + 10, 44, face, Math.sin(k * Math.PI) * 0.08);
+          drawIllust(sImg, s.x + Math.sin(k * Math.PI) * 8 * face, s.y + 10, SOL_H, face, Math.sin(k * Math.PI) * 0.08);
         } else {
-          drawIllust(sImg, s.x, s.y + 10, 44, face, Math.sin(G.time * 6 + s.homeOff) * 0.04);
+          const sway = sMoving ? Math.sin(G.time * 7 + s.homeOff) * 0.05 : Math.sin(G.time * 1.6 + s.homeOff) * 0.01;
+          drawIllust(sImg, s.x, s.y + 10, SOL_H, face, sway);
         }
-      } else drawSprite(Sprites.unit('soldier', Math.floor(G.time * 4 + s.homeOff) % 2), s.x, s.y + 10, 38, face);
-      drawHpBar(s.x, s.y - 34, 30, s.hp / s.maxHp, s.temp ? '#7bed9f' : '#4aa4e0');
+      } else drawSprite(Sprites.unit('soldier', Math.floor(G.time * 4 + s.homeOff) % 2), s.x, s.y + 10, 40, face);
+      drawHpBar(s.x, s.y - 40, 30, s.hp / s.maxHp, s.temp ? '#7bed9f' : '#4aa4e0');
     } else {
       const hh = u;
       if (hh.dead) {
@@ -1473,7 +1480,8 @@ function drawUnits() {
           const tilt = Math.sin(k * Math.PI) * 0.11;
           drawIllust(hImg, hh.x + lunge * face, hh.y + 12, 60, face, tilt);
         } else {
-          const sway = moving ? Math.sin(G.time * 9) * 0.06 : Math.sin(G.time * 2.2) * 0.018;
+          // 대기 중에는 거의 흔들리지 않게(아주 잔잔한 호흡), 이동 시에만 또렷한 흔들림
+          const sway = moving ? Math.sin(G.time * 8) * 0.05 : Math.sin(G.time * 1.4) * 0.006;
           drawIllust(hImg, hh.x, hh.y + 12, 58, face, sway);
         }
       } else {
