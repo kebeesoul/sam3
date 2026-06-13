@@ -525,7 +525,7 @@ const Sprites = (() => {
     if (terrainStageId === stage.id && terrainCache && terrainReadyKey === readyKey) return terrainCache;
     terrainStageId = stage.id;
     terrainReadyKey = readyKey;
-    const W = 960, H = 600;
+    const W = (stage.world && stage.world.w) || 960, H = (stage.world && stage.world.h) || 600;
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const g = c.getContext('2d');

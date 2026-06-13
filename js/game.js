@@ -71,7 +71,8 @@ let lastTime = 0;
 
 /* 건설 부지 자동 배치: 경로 위(길)에는 절대 놓지 않고, 길 양옆 풀밭에
    고르게 분포시킨다. (길이 늘어나도 부지가 길에 겹치는 버그 원천 차단) */
-function placeSpots(paths, map) {
+function placeSpots(paths, map, world) {
+  const WW = (world && world.w) || W, WH = (world && world.h) || H;
   const samples = [];
   for (const p of paths) {
     const tot = pathLength(p);
@@ -94,12 +95,13 @@ function placeSpots(paths, map) {
     for (const s of arr) { const d = Math.hypot(s.x - x, s.y - y); if (d < m) m = d; }
     return m;
   };
-  const NEAR = 50, FAR = 120, MAXN = 9;
+  const scale = WW / W; // 전장 확대 배수
+  const NEAR = 50, FAR = 120, MAXN = Math.min(14, Math.round(9 * scale)); // 큰 맵일수록 부지 더 많이
   const GAP = 52;          // 부지 최소 간격(스프라이트 겹침 방지)
   const CLUSTER = 78;      // 콤보용 군집 반경
   const cands = [];
-  for (let y = 76; y <= 540; y += 16) {
-    for (let x = 44; x <= 916; x += 16) {
+  for (let y = 76; y <= WH - 60; y += 16) {
+    for (let x = 44; x <= WW - 44; x += 16) {
       if (inWater(x, y) || inUI(x, y)) continue;
       const dp = minToPath(x, y);
       if (dp < NEAR || dp > FAR) continue;
@@ -155,12 +157,43 @@ function placeSpots(paths, map) {
   return chosen.slice(0, MAXN).map(c => [Math.round(c.x), Math.round(c.y)]);
 }
 
-function newGameState(stage) {
+// 스테이지가 올라갈수록 전장이 커진다(1화면 초과 → 드래그 이동). 1.0이면 화면에 꽉 맞음.
+const WORLD_SCALE = [1, 1, 1, 1.18, 1.18, 1.32, 1.32, 1.46, 1.46, 1.6];
+function scaleStage(stage, s) {
+  const clone = Object.assign({}, stage);
+  clone.world = { w: Math.round(W * s), h: Math.round(H * s) };
+  if (s === 1) return clone;
+  const sp = pt => [Math.round(pt[0] * s), Math.round(pt[1] * s)];
+  if (stage.path) clone.path = stage.path.map(sp);
+  if (stage.paths) clone.paths = stage.paths.map(p => p.map(sp));
+  if (stage.spots) clone.spots = stage.spots.map(sp);
+  const m = stage.map;
+  if (m) {
+    const nm = {};
+    if (m.fields) nm.fields = m.fields.map(f => ({ ...f, x: f.x * s, y: f.y * s, w: f.w * s, h: f.h * s }));
+    if (m.villages) nm.villages = m.villages.map(v => ({ ...v, x: v.x * s, y: v.y * s, r: v.r * s }));
+    if (m.forests) nm.forests = m.forests.map(f => ({ ...f, x: f.x * s, y: f.y * s, r: f.r * s }));
+    if (m.hills) nm.hills = m.hills.map(h => ({ ...h, x: h.x * s, y: h.y * s, rx: h.rx * s, ry: h.ry * s }));
+    if (m.ranges) nm.ranges = m.ranges.map(r => ({ ...r, along: r.along.map(sp), h: (r.h || 0) * s }));
+    if (m.river) nm.river = { x0: m.river.x0 * s, x1: m.river.x1 * s };
+    if (m.shoreY != null) nm.shoreY = m.shoreY * s;
+    if (m.bridge) nm.bridge = { ...m.bridge, x: m.bridge.x * s, y: m.bridge.y * s, len: m.bridge.len * s };
+    clone.map = nm;
+  }
+  return clone;
+}
+
+function newGameState(stageIn) {
+  const stage = scaleStage(stageIn, WORLD_SCALE[stageIn.id] != null ? WORLD_SCALE[stageIn.id] : 1);
+  const world = stage.world;
   const paths = stage.paths || [stage.path];
-  const spots = placeSpots(paths, stage.map);
+  const spots = placeSpots(paths, stage.map, world);
   return {
     stage,
     paths,
+    world,
+    cam: { x: Math.round((world.w - W) / 2), y: Math.round((world.h - H) / 2) },
+    drag: null,
     gold: stage.gold,
     lives: stage.lives,
     waveIdx: -1,            // 아직 시작 전
@@ -169,7 +202,7 @@ function newGameState(stage) {
     spawnQueue: [],
     enemies: [],
     towers: spots.map((s, i) => ({ spotIdx: i, x: s[0], y: s[1], type: null, level: 0, cooldown: 0, soldiers: [] })),
-    forts: fortPositions(paths).map(f => ({ x: f.x, y: f.y, level: 0, cooldown: 0 })),
+    forts: fortPositions(paths, world).map(f => ({ x: f.x, y: f.y, level: 0, cooldown: 0 })),
     projectiles: [],
     effects: [],
     floaters: [],
@@ -226,11 +259,12 @@ const FORT_LEVELS = [
   { name: '강화 성채', range: 160, dmg: [26, 38], rate: 0.95, cost: 200 },
   { name: '철벽 성채', range: 190, dmg: [40, 56], rate: 0.8,  cost: 380 },
 ];
-function fortPositions(paths) {
+function fortPositions(paths, world) {
+  const WW = (world && world.w) || W, WH = (world && world.h) || H;
   const out = [];
   for (const p of paths) {
     const e = p[p.length - 1];
-    const fx = Math.max(50, Math.min(W - 50, e[0])), fy = Math.max(64, Math.min(H - 8, e[1] + 30));
+    const fx = Math.max(50, Math.min(WW - 50, e[0])), fy = Math.max(64, Math.min(WH - 8, e[1] + 30));
     const cx = fx, cy = fy - 40;
     if (out.some(f => Math.hypot(f.x - cx, f.y - cy) < 50)) continue;
     out.push({ x: cx, y: cy });
@@ -495,7 +529,7 @@ function startNextWave() {
   G.waveIdx++;
   queueWave(G.waveIdx);
   G.waveTimer = 999;
-  addFloater(W / 2, 80, `${G.waveIdx + 1}번째 공세!`, '#fff', 26);
+  addFloater((G.cam ? G.cam.x : 0) + W / 2, (G.cam ? G.cam.y : 0) + 80, `${G.waveIdx + 1}번째 공세!`, '#fff', 26);
   AudioSys.play('horn');
   maybeEvent();
   updateHUD();
@@ -1043,8 +1077,12 @@ function pathSamples() {
 
 function draw() {
   if (!G) return;
+  clampCam();
   ctx.save();
   if (G.shake > 0) ctx.translate(rand(-4, 4) * G.shake, rand(-4, 4) * G.shake);
+  // 월드 레이어 (카메라 적용)
+  ctx.save();
+  ctx.translate(-G.cam.x, -G.cam.y);
   ctx.drawImage(Sprites.terrain(G.stage, pathSamples()), 0, 0);
   drawSpots();
   drawForts();
@@ -1054,9 +1092,31 @@ function draw() {
   drawParticles();
   drawEffects();
   drawFloaters();
+  drawAiming();
+  ctx.restore();
+  // 화면 고정 UI 레이어
   drawWaveBanner();
   drawCombo();
-  drawAiming();
+  drawPanHint();
+  ctx.restore();
+}
+
+function clampCam() {
+  if (!G.cam || !G.world) return;
+  G.cam.x = clamp(G.cam.x, 0, Math.max(0, G.world.w - W));
+  G.cam.y = clamp(G.cam.y, 0, Math.max(0, G.world.h - H));
+}
+
+// 전장이 화면보다 클 때 드래그 안내 (처음 잠깐)
+function drawPanHint() {
+  if (!G.world || (G.world.w <= W && G.world.h <= H)) return;
+  if (G.time > 6) return;
+  ctx.save();
+  ctx.globalAlpha = clamp(6 - G.time, 0, 1) * 0.8;
+  ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 3;
+  ctx.strokeText('🖐 드래그하여 전장을 둘러보세요', W / 2, H - 16);
+  ctx.fillText('🖐 드래그하여 전장을 둘러보세요', W / 2, H - 16);
   ctx.restore();
 }
 
@@ -1940,26 +2000,58 @@ function refreshSelPanel() {
 }
 
 /* ---------------- 캔버스 입력 ---------------- */
+// 화면 좌표(뷰포트) 변환
+function screenXY(ev) {
+  const rect = canvas.getBoundingClientRect();
+  return { sx: (ev.clientX - rect.left) * W / rect.width, sy: (ev.clientY - rect.top) * H / rect.height };
+}
+// 월드 좌표(카메라 보정)
+function worldXY(ev) {
+  const { sx, sy } = screenXY(ev);
+  return { x: sx + (G.cam ? G.cam.x : 0), y: sy + (G.cam ? G.cam.y : 0) };
+}
+
+// 드래그로 전장 이동 (월드가 화면보다 클 때)
+const DRAG_THRESH = 6;
+canvas.addEventListener('pointerdown', (ev) => {
+  if (!G || G.over) return;
+  const { sx, sy } = screenXY(ev);
+  G.drag = { sx, sy, camX: G.cam.x, camY: G.cam.y, moved: false };
+});
+canvas.addEventListener('pointermove', (ev) => {
+  if (!G) return;
+  const { sx, sy } = screenXY(ev);
+  if (G.aiming) { G.aimX = sx + G.cam.x; G.aimY = sy + G.cam.y; }
+  if (G.drag && (ev.buttons & 1 || ev.pressure > 0)) {
+    const dx = sx - G.drag.sx, dy = sy - G.drag.sy;
+    if (!G.drag.moved && Math.hypot(dx, dy) > DRAG_THRESH) G.drag.moved = true;
+    if (G.drag.moved) { G.cam.x = G.drag.camX - dx; G.cam.y = G.drag.camY - dy; clampCam(); }
+  }
+});
+canvas.addEventListener('pointerup', () => { if (G && G.drag) setTimeout(() => { if (G) G.drag = null; }, 0); });
+canvas.addEventListener('pointercancel', () => { if (G) G.drag = null; });
+
 canvas.addEventListener('click', (ev) => {
   if (!G || G.over) return;
-  const rect = canvas.getBoundingClientRect();
-  const x = (ev.clientX - rect.left) * W / rect.width;
-  const y = (ev.clientY - rect.top) * H / rect.height;
+  if (G.drag && G.drag.moved) { G.drag = null; return; } // 드래그였으면 클릭 무시
+  const { sx, sy } = screenXY(ev);
+  const { x, y } = worldXY(ev);
 
-  // 보급기 조준 모드: 지점 클릭 시 발동
+  // 보급기 조준 모드: 지점 클릭 시 발동 (월드 좌표)
   if (G.aiming) {
-    if (G.aiming === 'ult') castUlt(clamp(x, 0, W), clamp(y, 0, H));
-    else resolveAbility(G.aiming, clamp(x, 0, W), clamp(y, 0, H));
+    const cx = clamp(x, 0, G.world.w), cy = clamp(y, 0, G.world.h);
+    if (G.aiming === 'ult') castUlt(cx, cy);
+    else resolveAbility(G.aiming, cx, cy);
     G.aiming = null;
     return;
   }
 
-  // 웨이브 소집 배너 — 대기 중 즉시출전, 또는 전투 중 '미리 소집'(웨이브당 1회, +20% 금)
+  // 웨이브 소집 배너 — 화면 고정 UI라 화면 좌표(sx,sy)로 판정
   {
     const moreWaves = G.waveIdx < G.stage.waves.length - 1;
     const fieldClear = (G.waveIdx < 0) || (G.spawnQueue.length === 0 && G.enemies.length === 0);
     const canSummon = moreWaves && (fieldClear || !G.preCalled);
-    if (canSummon && x > W / 2 - 150 && x < W / 2 + 150 && y > 14 && y < 48) {
+    if (canSummon && sx > W / 2 - 150 && sx < W / 2 + 150 && sy > 14 && sy < 48) {
       let bonus;
       if (fieldClear) {
         bonus = Math.floor(G.waveTimer * 2);
@@ -1967,7 +2059,7 @@ canvas.addEventListener('click', (ev) => {
         bonus = Math.round(WAVE_GAP * 2 * 1.2); // 적이 남아있을 때 미리 소집: 10초 대기 호출보다 20% 더
         G.preCalled = true;
       }
-      if (bonus > 0) { G.gold += bonus; addFloater(W / 2, 70, `조기 소집 보너스 +${bonus}`, '#ffd700', 15); }
+      if (bonus > 0) { G.gold += bonus; addFloater(G.cam.x + W / 2, G.cam.y + 70, `조기 소집 보너스 +${bonus}`, '#ffd700', 15); }
       G.earlyCalls++;
       startNextWave();
       return;
@@ -2013,18 +2105,11 @@ canvas.addEventListener('click', (ev) => {
     }
   }
   if (h && !h.dead) {
-    h.tx = clamp(x, 16, W - 16); h.ty = clamp(y, 16, H - 16);
+    h.tx = clamp(x, 16, G.world.w - 16); h.ty = clamp(y, 16, G.world.h - 16);
     h.moveCmd = true; // 명시적 이동 명령: 교전 중이라도 공격을 멈추고 이동
     if (h.target) { if (h.target.blocker === h) h.target.blocker = null; h.target = null; }
   }
   selectClear();
-});
-
-canvas.addEventListener("mousemove", (ev) => {
-  if (!G || !G.aiming) return;
-  const rect = canvas.getBoundingClientRect();
-  G.aimX = (ev.clientX - rect.left) * W / rect.width;
-  G.aimY = (ev.clientY - rect.top) * H / rect.height;
 });
 canvas.addEventListener('contextmenu', (ev) => {
   if (G && G.aiming) { ev.preventDefault(); G.aiming = null; }
@@ -2034,7 +2119,7 @@ canvas.addEventListener('contextmenu', (ev) => {
 function toggleAiming(key) {
   if (!G || G.over) return;
   const st = G.abilities[key];
-  if (st.cd > 0) { addFloater(W / 2, 70, '재사용 대기 중 ' + Math.ceil(st.cd) + 's', '#ff8a6a', 15); return; }
+  if (st.cd > 0) { addFloater(G.cam.x + W / 2, G.cam.y + 70, '재사용 대기 중 ' + Math.ceil(st.cd) + 's', '#ff8a6a', 15); return; }
   G.aiming = G.aiming === key ? null : key;
 }
 for (const key of Object.keys(ABILITIES)) {
