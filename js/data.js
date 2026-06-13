@@ -465,3 +465,24 @@ const STAGES = [
     ],
   },
 ];
+
+// 스테이지가 높을수록 적 공세 횟수 증가 (6 → 최대 12).
+// 보스 웨이브(마지막)는 유지하고, 그 직전에 후반 본대 웨이브를 복제·증강해 끼워 넣는다.
+const WAVE_TARGET = [6, 7, 7, 8, 9, 9, 10, 11, 12, 12];
+for (const st of STAGES) {
+  const target = WAVE_TARGET[st.id] != null ? WAVE_TARGET[st.id] : st.waves.length;
+  if (st.waves.length >= target) continue;
+  const boss = st.waves[st.waves.length - 1];
+  const body = st.waves.slice(0, -1);
+  const out = body.slice();
+  // 복제 출처: 첫(가벼운) 웨이브와 마지막(가장 센) 본대 웨이브를 피해 중간대를 순환 복제 → 분량은 늘리되 과부하 방지
+  const pool = body.length > 2 ? body.slice(1, -1) : body;
+  let k = 0;
+  while (out.length < target - 1 && pool.length) {
+    const src = pool[k % pool.length];
+    out.push(src.map(g => [g[0], g[1], g[2], g[3]])); // 증강 없이 동일 강도로 복제
+    k++;
+  }
+  out.push(boss);
+  st.waves = out;
+}

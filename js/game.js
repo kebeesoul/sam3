@@ -82,6 +82,8 @@ function placeSpots(paths, map) {
     if (map && map.river && x > map.river.x0 - 10 && x < map.river.x1 + 10) return true;
     return false;
   };
+  // 좌하단 보급기 버튼/우하단 필살기 버튼 위에는 부지를 놓지 않는다(클릭 가림 방지)
+  const inUI = (x, y) => (y > 498 && (x < 180 || x > 838));
   const minToPath = (x, y) => {
     let m = 1e9;
     for (const s of samples) { const d = (s.x - x) * (s.x - x) + (s.y - y) * (s.y - y); if (d < m) m = d; }
@@ -92,49 +94,65 @@ function placeSpots(paths, map) {
     for (const s of arr) { const d = Math.hypot(s.x - x, s.y - y); if (d < m) m = d; }
     return m;
   };
-  const NEAR = 50, FAR = 120, MAXN = 8;
+  const NEAR = 50, FAR = 120, MAXN = 9;
+  const GAP = 52;          // 부지 최소 간격(스프라이트 겹침 방지)
+  const CLUSTER = 78;      // 콤보용 군집 반경
   const cands = [];
-  for (let y = 76; y <= 544; y += 18) {
-    for (let x = 44; x <= 916; x += 18) {
-      if (inWater(x, y)) continue;
+  for (let y = 76; y <= 540; y += 16) {
+    for (let x = 44; x <= 916; x += 16) {
+      if (inWater(x, y) || inUI(x, y)) continue;
       const dp = minToPath(x, y);
       if (dp < NEAR || dp > FAR) continue;
       cands.push({ x, y, dp });
     }
   }
   const chosen = [];
-  // 1) 본진 성채 '앞 접근로'에 최소 2개 확보 → 성채 뒤가 아니라 적이 오는 길목에 배치
+  const ok = (c) => chosen.every(s => Math.hypot(s.x - c.x, s.y - c.y) >= GAP);
+  // 군집 만들기: 시드 옆에 가까운 동료 부지 1~2개를 더 붙인다
+  const growCluster = (seed, want) => {
+    chosen.push(seed); let added = 1;
+    const buddies = cands.filter(c => {
+      const d = Math.hypot(c.x - seed.x, c.y - seed.y);
+      return d >= GAP && d <= CLUSTER;
+    }).sort((a, b) => Math.hypot(a.x - seed.x, a.y - seed.y) - Math.hypot(b.x - seed.x, b.y - seed.y));
+    for (const c of buddies) {
+      if (added >= want) break;
+      if (ok(c)) { chosen.push(c); added++; }
+    }
+  };
+
+  // 1) 본진 성채 '앞 접근로'에 군집(2~3) 확보 — 반드시 성채 앞(적이 오는 쪽)
   const forts = [];
   for (const p of paths) {
     const e = p[p.length - 1];
     if (forts.some(f => Math.hypot(f.e[0] - e[0], f.e[1] - e[1]) < 40)) continue;
     const tot = pathLength(p);
-    forts.push({ e, ap: pointAt(p, Math.max(0, tot - 64)) }); // 성채 직전 접근 지점
+    forts.push({ e, ap: pointAt(p, Math.max(0, tot - 70)) });
   }
   for (const f of forts) {
-    // 접근로(ap) 가까이 + 성채(e)보다 '앞쪽'(=경로 진행 반대편, 적이 지나오는 쪽) 후보
-    const near = cands.filter(c => {
+    const fdx = f.ap.x - f.e[0], fdy = f.ap.y - f.e[1]; // 성채→접근로(=앞쪽) 방향
+    const front = cands.filter(c => {
       const da = Math.hypot(c.x - f.ap.x, c.y - f.ap.y);
-      const de = Math.hypot(c.x - f.e[0], c.y - f.e[1]);
-      return da < 120 && da <= de + 8;   // 성채보다 접근로에 더 가깝거나 비슷해야 함(뒤편 배제)
+      const dot = (c.x - f.e[0]) * fdx + (c.y - f.e[1]) * fdy; // 앞쪽이면 양수
+      return da < 105 && dot > 0;        // 성채 뒤편(dot<=0) 완전 배제
     });
-    near.sort((a, b) => Math.hypot(a.x - f.ap.x, a.y - f.ap.y) - Math.hypot(b.x - f.ap.x, b.y - f.ap.y));
-    let added = 0;
-    for (const c of near) {
-      if (chosen.every(s => Math.hypot(s.x - c.x, s.y - c.y) >= 56)) { chosen.push(c); if (++added >= 2) break; }
-    }
+    if (!front.length) continue;
+    front.sort((a, b) => Math.hypot(a.x - f.ap.x, a.y - f.ap.y) - Math.hypot(b.x - f.ap.x, b.y - f.ap.y));
+    const seed = front.find(ok);
+    if (seed) growCluster(seed, forts.length > 1 ? 2 : 3);
   }
-  // 2) 나머지는 '가장 먼 점 샘플링'으로 넓게 흩뿌린다
+  // 2) 경로를 따라 1~2개의 추가 군집을 '가장 먼 점'에서 키운다 (콤보 거점)
   while (chosen.length < MAXN) {
     let best = null, bestd = -1;
     for (const c of cands) {
+      if (!ok(c)) continue;
       const d = chosen.length ? minTo(chosen, c.x, c.y) : c.dp;
       if (d > bestd) { bestd = d; best = c; }
     }
-    if (!best || (chosen.length >= forts.length * 2 && bestd < 95)) break; // 충분히 흩어졌으면 중단
-    chosen.push(best);
+    if (!best || (chosen.length >= 4 && bestd < 92)) break;
+    growCluster(best, 2);
   }
-  return chosen.map(c => [Math.round(c.x), Math.round(c.y)]);
+  return chosen.slice(0, MAXN).map(c => [Math.round(c.x), Math.round(c.y)]);
 }
 
 function newGameState(stage) {
@@ -198,6 +216,7 @@ function pointAt(path, d) {
 /* ---------------- 적 생성 ---------------- */
 // 난이도 글로벌 배수 (전반적 상향)
 const ENEMY_HP_MUL = 1.1, ENEMY_DMG_MUL = 1.25, BOSS_HP_MUL = 1.65, BOSS_DMG_MUL = 1.2, TOWER_DMG_MUL = 1.32;
+const HERO_HP_MUL = 0.45; // 영웅 체력(에너지) 하향 — 종전 대비 절반 이하
 function makeEnemy(typeId, pathId = 0) {
   const base = ENEMY_TYPES[typeId] || BOSS_TYPES[typeId];
   const isBoss = !!BOSS_TYPES[typeId];
@@ -296,7 +315,7 @@ function spawnHero(heroId) {
   G.hero = {
     kind: 'hero', def,
     level, xp, special,
-    maxHp: Math.round(def.hp * mul * hpBuff), hp: Math.round(def.hp * mul * hpBuff),
+    maxHp: Math.round(def.hp * mul * hpBuff * HERO_HP_MUL), hp: Math.round(def.hp * mul * hpBuff * HERO_HP_MUL),
     dmgScaled: [def.dmg[0] * mul * dmgBuff, def.dmg[1] * mul * dmgBuff],
     ultMul: (1 + (level - 1) * 0.06) * (special ? 1.2 : 1),
     ultCdMul: special ? 0.75 : 1,
@@ -315,7 +334,7 @@ function gainHeroXp(amount) {
   if (after > before) {
     h.level = after;
     const mul = heroStatMul(after);
-    h.maxHp = Math.round(h.def.hp * mul);
+    h.maxHp = Math.round(h.def.hp * mul * (h.special ? 1.3 : 1) * HERO_HP_MUL);
     h.hp = h.maxHp; // 레벨업 시 완전 회복
     h.dmgScaled = [h.def.dmg[0] * mul, h.def.dmg[1] * mul];
     h.ultMul = 1 + (after - 1) * 0.06;
@@ -477,6 +496,7 @@ function updateEnemies(dt) {
     if (e.dead) continue;
     e.wobble += dt * 6;
     if (e.flash > 0) e.flash -= dt;
+    if (e.attackT > 0) e.attackT -= dt;
     // 화상
     if (e.burnTime > 0) {
       e.burnTime -= dt;
@@ -494,17 +514,22 @@ function updateEnemies(dt) {
       e.atkCd -= dt;
       if (e.atkCd <= 0 && !e.noFight) {
         e.atkCd = 1.0;
+        e.attackT = ENEMY_ATK_DUR;
+        e.attackFace = e.blocker.x >= e.x ? 1 : -1;
         e.blocker.hp -= rollDmg(e.dmg) * (e.rage || 1);
         addEffect('slash', e.blocker.x, e.blocker.y, 0.2, { ang: rand(-1.2, 1.2) });
         if (e.blocker.hp <= 0) killAlly(e.blocker);
       }
-      continue;
+      // 일반 적은 멈춰서 교전, 적군 영웅(보스)은 느려지되 전진을 멈추지 않음
+      if (!e.isBoss) continue;
+    } else {
+      e.blocker = null;
     }
-    e.blocker = null;
 
     // 이동
-    const slowMul = e.slow > 0 ? 0.5 : 1;
+    let slowMul = e.slow > 0 ? 0.5 : 1;
     if (e.slow > 0) e.slow -= dt;
+    if (e.isBoss && e.blocker && !e.blocker.dead) slowMul = Math.min(slowMul, 0.5); // 교전 중 보스 50% 전진
     e.progress += e.speed * slowMul * dt;
     const p = pointAt(e.path, e.progress);
     e.x = p.x; e.y = p.y;
@@ -661,19 +686,28 @@ function updateBarracks(t, lv, dt) {
   }
 }
 
-/* 근접 아군 공통 행동: 집결지 주변의 적과 교전 */
+/* 근접 아군 공통 행동: 집결지 주변의 적과 교전
+   - 적군 종류와 무관하게 '집결 앵커 기준 일정 반경(engageRange)' 안의 가장 가까운 적에 일관되게 반응
+   - 앵커에서 engageRange*1.6 이상 멀어진 대상은 놓아줌(과도한 추격/보스 무한 추격 방지) */
 function combatUnit(u, rally, engageRange, moveSpeed, dt, tower) {
-  // 교전 대상 탐색
-  if (!u.target || u.target.dead || u.target.blocker !== u) {
+  if (u.kind !== 'hero' && u.attackT > 0) u.attackT -= dt; // 영웅은 updateHero에서 별도 감소
+  const anchor = { x: rally.x + Math.cos(u.homeOff || 0) * (u.anchorRad || 14), y: rally.y + Math.sin(u.homeOff || 0) * (u.anchorRad || 14) };
+  const leash = engageRange * 1.6;
+  // 기존 대상 유효성 검사(놓아주기 포함)
+  if (u.target && (u.target.dead || u.target.blocker !== u || dist(anchor, u.target) > leash)) {
+    if (u.target.blocker === u) u.target.blocker = null;
     u.target = null;
+  }
+  // 새 대상 탐색: 앵커 기준 반경 내 가장 가까운 적 (적 종류 무관, 일관 반응)
+  if (!u.target) {
+    let best = null, bestd = engageRange;
     for (const e of G.enemies) {
-      if (e.dead || e.noFight && false) continue;
-      if ((e.blocker && e.blocker !== u) || e.stun > 0) continue;
-      const anchor = { x: rally.x + Math.cos(u.homeOff || 0) * (u.anchorRad || 14), y: rally.y + Math.sin(u.homeOff || 0) * (u.anchorRad || 14) };
-      if (dist(anchor, e) <= engageRange && (!e.blocker || e.blocker === u)) {
-        u.target = e; e.blocker = u; break;
-      }
+      if (e.dead || e.stun > 0) continue;
+      if (e.blocker && e.blocker !== u) continue;
+      const da = dist(anchor, e);
+      if (da <= bestd) { bestd = da; best = e; }
     }
+    if (best) { u.target = best; best.blocker = u; }
   }
   if (u.target) {
     const e = u.target;
@@ -693,6 +727,8 @@ function combatUnit(u, rally, engageRange, moveSpeed, dt, tower) {
           addEffect('heroStrike', e.x, e.y, 0.3, { ...st, ang: Math.atan2(e.y - u.y, e.x - u.x) });
           AudioSys.play('slash', 90);
         } else {
+          u.attackT = ENEMY_ATK_DUR;
+          u.attackFace = e.x >= u.x ? 1 : -1;
           addEffect('slash', e.x, e.y, 0.15, { ang: rand(-1.2, 1.2) });
         }
       }
@@ -718,8 +754,8 @@ function updateHero(dt) {
   }
   h.hp = Math.min(h.maxHp, h.hp + h.def.regen * dt);
 
-  // 인접한 적이 있으면 멈춰서 교전 (근접 영웅)
-  if (!h.def.ranged) {
+  // 인접한 적이 있으면 멈춰서 교전 (근접 영웅) — 단, 플레이어가 이동을 명령한 동안은 자동 교전하지 않음
+  if (!h.def.ranged && !h.moveCmd) {
     for (const e of G.enemies) {
       if (e.dead || (e.blocker && e.blocker !== h)) continue;
       if (dist(h, e) < 34) { h.tx = h.x; h.ty = h.y; break; }
@@ -734,6 +770,7 @@ function updateHero(dt) {
     updateUltBtn();
     return;
   }
+  h.moveCmd = false; // 목적지 도착: 다시 자동 교전 허용
 
   if (h.def.ranged) {
     // 원거리 영웅 (제갈량)
@@ -1040,6 +1077,7 @@ const HERO_STRIKE = {
   zhugeliang: { kind: 'glyph',   color: '#6ae8d8', color2: '#bff7ef' }, // 술법 문양
 };
 const HERO_ATK_DUR = 0.38;
+const ENEMY_ATK_DUR = 0.34; // 적/아군 일반 유닛 공격 모션 지속 (공격 아이콘 전환)
 const TOWER_LV_FX = ['brightness(0.92)', null, 'saturate(1.2) brightness(1.07)'];
 
 function drawSpots() {
@@ -1125,9 +1163,13 @@ function drawUnits() {
       const e = u;
       const frame = Math.floor(e.wobble * 1.6) % 2;
       const ahead = pointAt(e.path, e.progress + 6);
-      const face = (e.blocker && !e.blocker.dead) ? (e.blocker.x >= e.x ? 1 : -1) : (ahead.x >= e.x - 0.3 ? 1 : -1);
+      const attacking = e.attackT > 0;
+      const face = attacking && e.attackFace ? e.attackFace
+        : (e.blocker && !e.blocker.dead) ? (e.blocker.x >= e.x ? 1 : -1)
+        : (ahead.x >= e.x - 0.3 ? 1 : -1);
       const map = e.isBoss ? ['unit_general', BOSS_ILLUST_HUE[e.typeId]] : UNIT_ILLUST[e.typeId];
-      const uImg = map ? SpriteImages.variant(map[0], map[1]) : null;
+      const atkImg = (attacking && map) ? SpriteImages.variant(map[0] + '_atk', map[1]) : null;
+      const uImg = atkImg || (map ? SpriteImages.variant(map[0], map[1]) : null);
       const hgt = uImg ? (e.isBoss ? 82 : 52) : (e.isBoss ? 62 : 42);
       shadow(e.x, e.y + 11, e.isBoss ? 23 : 16);
       if (e.shielded) {
@@ -1136,12 +1178,16 @@ function drawUnits() {
         ctx.strokeStyle = 'rgba(160,210,255,0.7)'; ctx.stroke();
       }
       if (uImg) {
-        const sway = (e.stun > 0 || (e.blocker && !e.blocker.dead)) ? 0 : Math.sin(e.wobble * 1.8) * 0.07;
-        const bob = Math.abs(Math.sin(e.wobble * 1.8)) * 1.8;
-        drawIllust(uImg, e.x, e.y + 10 - bob, hgt, face, sway);
+        const sway = (e.stun > 0 || attacking || (e.blocker && !e.blocker.dead)) ? 0 : Math.sin(e.wobble * 1.8) * 0.07;
+        const bob = (attacking || (e.blocker && !e.blocker.dead)) ? 0 : Math.abs(Math.sin(e.wobble * 1.8)) * 1.8;
+        const k = attacking ? clamp(1 - e.attackT / ENEMY_ATK_DUR, 0, 1) : 0;
+        const lunge = attacking ? Math.sin(k * Math.PI) * 9 : 0;
+        const tilt = attacking ? Math.sin(k * Math.PI) * 0.09 : sway;
+        const dx = e.x + lunge * face;
+        drawIllust(uImg, dx, e.y + 10 - bob, hgt, face, tilt);
         if (e.flash > 0) {
-          const wImg = SpriteImages.variant(map[0], 'brightness(0) invert(1)');
-          if (wImg) { ctx.globalAlpha = clamp(e.flash / 0.1, 0, 1) * 0.85; drawIllust(wImg, e.x, e.y + 10 - bob, hgt, face, sway); ctx.globalAlpha = 1; }
+          const wImg = SpriteImages.variant((atkImg ? map[0] + '_atk' : map[0]), 'brightness(0) invert(1)');
+          if (wImg) { ctx.globalAlpha = clamp(e.flash / 0.1, 0, 1) * 0.85; drawIllust(wImg, dx, e.y + 10 - bob, hgt, face, tilt); ctx.globalAlpha = 1; }
         }
       } else {
         drawSprite(Sprites.unit(e.typeId, frame), e.x, e.y + 10, hgt, face);
@@ -1170,23 +1216,47 @@ function drawUnits() {
       }
     } else if (it.kind === 'soldier') {
       const s = u;
-      const face = s.target && !s.target.dead ? (s.target.x >= s.x ? 1 : -1) : 1;
+      const attacking = s.attackT > 0;
+      const face = attacking && s.attackFace ? s.attackFace
+        : s.target && !s.target.dead ? (s.target.x >= s.x ? 1 : -1) : 1;
       shadow(s.x, s.y + 10, 13);
       const filter = s.temp ? 'saturate(1.5) brightness(1.18)' : null;
-      const sImg = SpriteImages.variant('unit_soldier', filter);
+      const atkImg = attacking ? SpriteImages.variant('unit_soldier_atk', filter) : null;
+      const sImg = atkImg || SpriteImages.variant('unit_soldier', filter);
       if (s.temp) drawGroundRing(s.x, s.y + 10, 16, 7, '#7bed9f', clamp(s.life / ABILITIES.reinf.life, 0.25, 1));
-      if (sImg) drawIllust(sImg, s.x, s.y + 10, 44, face, Math.sin(G.time * 6 + s.homeOff) * 0.04);
-      else drawSprite(Sprites.unit('soldier', Math.floor(G.time * 4 + s.homeOff) % 2), s.x, s.y + 10, 38, face);
+      if (sImg) {
+        if (attacking) {
+          const k = clamp(1 - s.attackT / ENEMY_ATK_DUR, 0, 1);
+          drawIllust(sImg, s.x + Math.sin(k * Math.PI) * 8 * face, s.y + 10, 44, face, Math.sin(k * Math.PI) * 0.08);
+        } else {
+          drawIllust(sImg, s.x, s.y + 10, 44, face, Math.sin(G.time * 6 + s.homeOff) * 0.04);
+        }
+      } else drawSprite(Sprites.unit('soldier', Math.floor(G.time * 4 + s.homeOff) % 2), s.x, s.y + 10, 38, face);
       drawHpBar(s.x, s.y - 34, 30, s.hp / s.maxHp, s.temp ? '#7bed9f' : '#4aa4e0');
     } else {
       const hh = u;
       if (hh.dead) {
-        ctx.globalAlpha = 0.55;
-        ctx.font = '18px serif'; ctx.textAlign = 'center';
-        ctx.fillText('⛺', hh.x, hh.y + 5);
-        ctx.font = 'bold 11px sans-serif'; ctx.fillStyle = '#fff';
-        ctx.fillText(Math.ceil(hh.respawnT) + 's', hh.x, hh.y + 18);
+        // 부상 상태: 복귀 쿨타임을 또렷하게 표시
+        const total = hh.def.respawn || 1;
+        const rem = Math.max(0, hh.respawnT);
+        const ratio = clamp(1 - rem / total, 0, 1);
+        ctx.globalAlpha = 0.6;
+        ctx.font = '20px serif'; ctx.textAlign = 'center';
+        ctx.fillText('⛺', hh.x, hh.y + 4);
         ctx.globalAlpha = 1;
+        // 명패 + 카운트다운
+        const label = `${hh.def.name} 부상`;
+        ctx.font = 'bold 11px sans-serif';
+        const lw = Math.max(ctx.measureText(label).width, 40) + 12;
+        ctx.fillStyle = 'rgba(20,8,4,0.82)';
+        roundRect(hh.x - lw / 2, hh.y - 30, lw, 15, 4); ctx.fill();
+        ctx.fillStyle = '#ffd9a0'; ctx.fillText(label, hh.x, hh.y - 19);
+        // 쿨타임 바
+        const bw = 46;
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(hh.x - bw / 2 - 1, hh.y + 13, bw + 2, 6);
+        ctx.fillStyle = '#7bed9f'; ctx.fillRect(hh.x - bw / 2, hh.y + 14, bw * ratio, 4);
+        ctx.font = 'bold 11px sans-serif'; ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+        ctx.fillText(`복귀까지 ${Math.ceil(rem)}초`, hh.x, hh.y + 30);
         continue;
       }
       const attacking = hh.attackT > 0;
@@ -1737,7 +1807,11 @@ canvas.addEventListener('click', (ev) => {
       }
     }
   }
-  if (h && !h.dead) { h.tx = clamp(x, 16, W - 16); h.ty = clamp(y, 16, H - 16); }
+  if (h && !h.dead) {
+    h.tx = clamp(x, 16, W - 16); h.ty = clamp(y, 16, H - 16);
+    h.moveCmd = true; // 명시적 이동 명령: 교전 중이라도 공격을 멈추고 이동
+    if (h.target) { if (h.target.blocker === h) h.target.blocker = null; h.target = null; }
+  }
   selectClear();
 });
 
