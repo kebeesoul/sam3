@@ -69,8 +69,48 @@ let G = null;          // 현재 스테이지 런타임 상태
 let screen = 'title';  // title | map | dialogue | game
 let lastTime = 0;
 
+/* 건설 부지 자동 배치: 경로 위(길)에는 절대 놓지 않고, 길 양옆 풀밭에
+   고르게 분포시킨다. (길이 늘어나도 부지가 길에 겹치는 버그 원천 차단) */
+function placeSpots(paths, map) {
+  const samples = [];
+  for (const p of paths) {
+    const tot = pathLength(p);
+    for (let d = 0; d <= tot; d += 12) samples.push(pointAt(p, d));
+  }
+  const inWater = (x, y) => {
+    if (map && map.shoreY != null && y > map.shoreY - 6) return true;
+    if (map && map.river && x > map.river.x0 - 10 && x < map.river.x1 + 10) return true;
+    return false;
+  };
+  const minToPath = (x, y) => {
+    let m = 1e9;
+    for (const s of samples) { const d = (s.x - x) * (s.x - x) + (s.y - y) * (s.y - y); if (d < m) m = d; }
+    return Math.sqrt(m);
+  };
+  const NEAR = 50, FAR = 112, SPACING = 60, MAXN = 16;
+  const cands = [];
+  for (let y = 80; y <= 540; y += 22) {
+    for (let x = 48; x <= 912; x += 22) {
+      if (inWater(x, y)) continue;
+      const dp = minToPath(x, y);
+      if (dp < NEAR || dp > FAR) continue;
+      cands.push({ x, y, dp });
+    }
+  }
+  cands.sort((a, b) => a.dp - b.dp);  // 길에 가까운(방어 유효) 자리 우선
+  const chosen = [];
+  for (const c of cands) {
+    if (chosen.every(s => Math.hypot(s.x - c.x, s.y - c.y) >= SPACING)) {
+      chosen.push(c);
+      if (chosen.length >= MAXN) break;
+    }
+  }
+  return chosen.map(c => [Math.round(c.x), Math.round(c.y)]);
+}
+
 function newGameState(stage) {
   const paths = stage.paths || [stage.path];
+  const spots = placeSpots(paths, stage.map);
   return {
     stage,
     paths,
@@ -80,7 +120,7 @@ function newGameState(stage) {
     waveTimer: WAVE_GAP,    // 다음 웨이브까지 남은 시간 (최대 10초)
     spawnQueue: [],
     enemies: [],
-    towers: stage.spots.map((s, i) => ({ spotIdx: i, x: s[0], y: s[1], type: null, level: 0, cooldown: 0, soldiers: [] })),
+    towers: spots.map((s, i) => ({ spotIdx: i, x: s[0], y: s[1], type: null, level: 0, cooldown: 0, soldiers: [] })),
     projectiles: [],
     effects: [],
     floaters: [],
@@ -128,7 +168,7 @@ function pointAt(path, d) {
 
 /* ---------------- 적 생성 ---------------- */
 // 난이도 글로벌 배수 (전반적 상향)
-const ENEMY_HP_MUL = 1.15, ENEMY_DMG_MUL = 1.3, BOSS_HP_MUL = 1.8, BOSS_DMG_MUL = 1.25, TOWER_DMG_MUL = 0.9;
+const ENEMY_HP_MUL = 1.15, ENEMY_DMG_MUL = 1.3, BOSS_HP_MUL = 1.65, BOSS_DMG_MUL = 1.2, TOWER_DMG_MUL = 0.9;
 function makeEnemy(typeId, pathId = 0) {
   const base = ENEMY_TYPES[typeId] || BOSS_TYPES[typeId];
   const isBoss = !!BOSS_TYPES[typeId];

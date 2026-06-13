@@ -533,6 +533,9 @@ const Sprites = (() => {
     const th = stage.theme;
     const paths = stage.paths || [stage.path];
     const path = paths[0];
+    // 건설 부지 좌표: 런타임(G.towers) 우선, 없으면 stage.spots
+    const spotsArr = (typeof G !== 'undefined' && G && G.towers && G.towers.length)
+      ? G.towers.map(t => [t.x, t.y]) : (stage.spots || []);
 
     /* 1) 바닥: 잔디 텍스처 (테마 색조) — 없으면 기존 절차 생성 */
     const grassPat = TerrainTex.pattern(g, 'tex_grass', 230, THEME_TINT[th.deco]);
@@ -885,11 +888,11 @@ const Sprites = (() => {
     const blocksPath = (x, y, h) =>
       pathPts.some(p => Math.abs(p.x - x) < h * 0.45 + 27 && p.y > y - h - 8 && p.y < y + 16);
     const blocksSpot = (x, y, h) =>
-      stage.spots.some(sp => Math.abs(sp[0] - x) < h * 0.45 + 28 && sp[1] > y - h - 8 && sp[1] < y + 22);
+      spotsArr.some(sp => Math.abs(sp[0] - x) < h * 0.45 + 28 && sp[1] > y - h - 8 && sp[1] < y + 22);
     const canPlace = (x, y, h) => !inWater(x, y) && !blocksPath(x, y, h) && !blocksSpot(x, y, h);
     const clearOf = (x, y, r) =>
       !inWater(x, y) &&
-      !stage.spots.some(sp => Math.hypot(sp[0] - x, sp[1] - y) < r + 30) &&
+      !spotsArr.some(sp => Math.hypot(sp[0] - x, sp[1] - y) < r + 30) &&
       !pathPts.some(p => Math.hypot(p.x - x, p.y - y) < r + 26);
     const placed = [];
 
@@ -908,7 +911,7 @@ const Sprites = (() => {
         // 와이드 일러스트는 가로 폭이 크므로 차단 검사 폭을 넓힘
         const blockH = isWide ? hh * 2.2 : hh;
         if (pathPts.some(p => Math.abs(p.x - x) < blockH * 0.45 + 27 && p.y > y - hh - 8 && p.y < y + 16)) continue;
-        if (stage.spots.some(sp => Math.abs(sp[0] - x) < blockH * 0.45 + 28 && sp[1] > y - hh - 8 && sp[1] < y + 22)) continue;
+        if (spotsArr.some(sp => Math.abs(sp[0] - x) < blockH * 0.45 + 28 && sp[1] > y - hh - 8 && sp[1] < y + 22)) continue;
         if (inWater(x, y)) continue;
         placed.push({ name: kinds[i % kinds.length], x, y, h: hh, flip: i % 2 === 1 });
       }
@@ -920,7 +923,7 @@ const Sprites = (() => {
           const x = fo.x + (rnd() - 0.5) * fo.r, y = fo.y + (rnd() - 0.5) * fo.r * 0.5;
           const hh = 100 + rnd() * 40;
           if (pathPts.some(p => Math.abs(p.x - x) < hh + 27 && p.y > y - hh - 8 && p.y < y + 16)) continue;
-          if (stage.spots.some(sp => Math.abs(sp[0] - x) < hh + 28 && sp[1] > y - hh - 8 && sp[1] < y + 22)) continue;
+          if (spotsArr.some(sp => Math.abs(sp[0] - x) < hh + 28 && sp[1] > y - hh - 8 && sp[1] < y + 22)) continue;
           if (inWater(x, y)) continue;
           placed.push({ name: 'deco_grove', x, y, h: hh, flip: rnd() > 0.5 });
         }
