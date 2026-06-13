@@ -570,3 +570,50 @@ canvas#game {
   #btn-ult { bottom: 10px; }
   #ability-bar { bottom: 10px; }
 }
+
+/* ---------------- 맵 에디터 ---------------- */
+.map-panel-btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+#editor-ui {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+  display: none; flex-direction: column; gap: 4px;
+  background: linear-gradient(#241a10, #15100a);
+  border-bottom: 2px solid #6a5230; padding: 6px 8px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+  font-family: 'Noto Sans KR', sans-serif;
+}
+#editor-ui .ed-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+#editor-ui .ed-h { color: #ffe9a8; font-size: 14px; margin-right: 4px; }
+#editor-ui select {
+  background: #2c2114; color: #ecdcb8; border: 1px solid #6a5230;
+  border-radius: 6px; padding: 4px 6px; font-size: 12px;
+}
+.ed-btn {
+  background: #3a2c18; color: #ecdcb8; border: 1px solid #6a5230;
+  border-radius: 6px; padding: 5px 9px; font-size: 12px; cursor: pointer;
+  transition: background .12s, transform .08s;
+}
+.ed-btn:hover { background: #4a3820; }
+.ed-btn:active { transform: scale(0.95); }
+.ed-btn.active, .ed-tool.active { background: #c8902a; color: #1c1206; border-color: #ffe08a; font-weight: 700; }
+.ed-btn.save { background: #2f6b39; border-color: #5bbf6e; color: #eaffe9; }
+.ed-btn.danger { background: #6b2f2f; border-color: #bf5b5b; }
+.ed-tools { display: inline-flex; gap: 4px; }
+.ed-chk { color: #ecdcb8; font-size: 12px; display: inline-flex; align-items: center; gap: 3px; }
+.ed-sp { width: 1px; height: 22px; background: #6a5230; margin: 0 2px; }
+.ed-palrow { gap: 4px; }
+.ed-pal {
+  background: #2c2114; color: #cdbf9a; border: 1px solid #5a4830;
+  border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer;
+}
+.ed-pal.active { background: #3f7d3a; color: #fff; border-color: #8fe08a; }
+.ed-status { font-size: 11px; color: #b8a888; }
+.ed-status .ed-dirty { color: #ff9f6a; font-weight: 700; }
+.ed-status .ed-saved { color: #8fe08a; }
+body.editing #stage { margin-top: 96px; }
+#ed-toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: rgba(20,12,6,0.92); color: #ffe9a8; border: 1px solid #6a5230;
+  padding: 8px 16px; border-radius: 8px; font-size: 13px; z-index: 70;
+  opacity: 0; transition: opacity .2s; pointer-events: none;
+}
+#ed-toast.show { opacity: 1; }

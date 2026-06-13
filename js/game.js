@@ -184,10 +184,27 @@ function scaleStage(stage, s) {
 }
 
 function newGameState(stageIn) {
-  const stage = scaleStage(stageIn, WORLD_SCALE[stageIn.id] != null ? WORLD_SCALE[stageIn.id] : 1);
-  const world = stage.world;
+  // 맵 에디터 오버라이드가 있으면 우선 적용
+  const ov = (typeof MapEditor !== 'undefined') ? MapEditor.getOverride(stageIn.id) : null;
+  let stage, world;
+  if (ov && ov.paths && ov.paths.length) {
+    world = ov.world || { w: W, h: H };
+    stage = Object.assign({}, stageIn, {
+      world,
+      paths: ov.paths.map(p => p.map(pt => pt.slice())),
+      path: ov.paths[0].map(pt => pt.slice()),
+      map: ov.hideNature ? {} : (stageIn.map || {}),
+      decos: (ov.decos || []).map(d => ({ ...d })),
+    });
+  } else {
+    stage = scaleStage(stageIn, WORLD_SCALE[stageIn.id] != null ? WORLD_SCALE[stageIn.id] : 1);
+    world = stage.world;
+  }
   const paths = stage.paths || [stage.path];
-  const spots = placeSpots(paths, stage.map, world);
+  const spots = (ov && ov.spots && ov.spots.length) ? ov.spots.map(s => s.slice()) : placeSpots(paths, stage.map, world);
+  const forts = (ov && ov.forts && ov.forts.length)
+    ? ov.forts.map(f => ({ x: f[0], y: f[1], level: 0, cooldown: 0 }))
+    : fortPositions(paths, world).map(f => ({ x: f.x, y: f.y, level: 0, cooldown: 0 }));
   return {
     stage,
     paths,
@@ -202,7 +219,7 @@ function newGameState(stageIn) {
     spawnQueue: [],
     enemies: [],
     towers: spots.map((s, i) => ({ spotIdx: i, x: s[0], y: s[1], type: null, level: 0, cooldown: 0, soldiers: [] })),
-    forts: fortPositions(paths, world).map(f => ({ x: f.x, y: f.y, level: 0, cooldown: 0 })),
+    forts,
     projectiles: [],
     effects: [],
     floaters: [],
@@ -746,6 +763,15 @@ function updateFort(dt) {
   }
 }
 
+function drawCustomDecos() {
+  const decos = G.stage && G.stage.decos;
+  if (!decos || !decos.length) return;
+  for (const d of decos) {
+    const img = SpriteImages.variant(d.kind, null);
+    if (img) { shadow(d.x, d.y, (d.h || 64) * 0.28); drawIllust(img, d.x, d.y, d.h || 64); }
+  }
+}
+
 function drawForts() {
   if (!G.forts) return;
   for (let i = 0; i < G.forts.length; i++) {
@@ -756,6 +782,10 @@ function drawForts() {
       ctx.fillStyle = 'rgba(120,180,255,0.08)'; ctx.fill();
       ctx.strokeStyle = 'rgba(150,200,255,0.55)'; ctx.lineWidth = 1.5; ctx.setLineDash([6, 5]); ctx.stroke(); ctx.setLineDash([]);
     }
+    // 성채 일러스트 (위치는 G.forts 기준 — 에디터에서 옮긴 위치 반영)
+    shadow(f.x, f.y + 6, 34);
+    const fImg = SpriteImages.variant('deco_fortress', null);
+    if (fImg) drawIllust(fImg, f.x, f.y + 44, 128);
     // 레벨 별 표식
     ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
     const stars = '★'.repeat(f.level + 1);
@@ -1086,6 +1116,7 @@ function draw() {
   ctx.save();
   ctx.translate(-G.cam.x, -G.cam.y);
   ctx.drawImage(Sprites.terrain(G.stage, pathSamples()), 0, 0);
+  drawCustomDecos();
   drawSpots();
   drawForts();
   drawTowers();
@@ -2285,6 +2316,8 @@ $('#btn-sound').onclick = () => {
 document.addEventListener('pointerdown', () => AudioSys.unlock(), { passive: true });
 
 $('#btn-start').onclick = () => showStageMap();
+const _btnEditor = $('#btn-editor');
+if (_btnEditor) _btnEditor.onclick = () => { if (typeof MapEditor !== 'undefined') MapEditor.open(); };
 $('#btn-ult').onclick = (e) => { e.stopPropagation(); castUlt(); };
 $('#btn-speed').onclick = () => {
   G.speed = G.speed === 1 ? 2 : 1;
@@ -2327,6 +2360,8 @@ function loop(ts) {
   if (screen === 'game') {
     update(dt);
     draw();
+  } else if (screen === 'editor' && typeof MapEditor !== 'undefined') {
+    MapEditor.render();
   }
   requestAnimationFrame(loop);
 }

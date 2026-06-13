@@ -994,14 +994,13 @@ const Sprites = (() => {
     }
 
     /* 5) 출발 군문 / 도착 요새 (일러스트 우선) */
-    const seenGate = new Set(), seenFort = new Set();
+    // 출발 군문(게이트)만 지형에 그린다. 도착 요새(성채)는 게임에서 G.forts 위치로 그린다(에디터 이동 반영).
+    const seenGate = new Set();
     for (const pp of paths) {
-      const s0 = pp[0], e0 = pp[pp.length - 1];
+      const s0 = pp[0];
       const gx = Math.max(40, Math.min(W - 40, s0[0])), gy = Math.max(54, Math.min(H - 8, s0[1] + 26));
-      const fx = Math.max(50, Math.min(W - 50, e0[0])), fy = Math.max(64, Math.min(H - 8, e0[1] + 30));
-      const gk = (gx | 0) + ',' + (gy | 0), fk = (fx | 0) + ',' + (fy | 0);
+      const gk = (gx | 0) + ',' + (gy | 0);
       if (!seenGate.has(gk)) { seenGate.add(gk); if (!drawDecoSprite(g, 'deco_gate', gx, gy, 86, false)) drawGate(g, gx, gy - 26); }
-      if (!seenFort.has(fk)) { seenFort.add(fk); if (!drawDecoSprite(g, 'deco_fortress', fx, fy, 128, false)) drawFortress(g, fx, fy - 30); }
     }
 
     /* 6) 비네트 */
