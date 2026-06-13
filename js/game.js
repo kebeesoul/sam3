@@ -1347,8 +1347,11 @@ function drawUnits() {
         : s.target && !s.target.dead ? (s.target.x >= s.x ? 1 : -1) : 1;
       shadow(s.x, s.y + 10, 13);
       const filter = s.temp ? 'saturate(1.5) brightness(1.18)' : null;
-      const atkImg = attacking ? SpriteImages.variant('unit_soldier_atk', filter) : null;
-      const sImg = atkImg || SpriteImages.variant('unit_soldier', filter);
+      // 막사 레벨에 따른 무장 (대기/공격 동일 무장) — 원군은 레벨 0 의용군
+      const slv = (s.tower && s.tower.level) ? s.tower.level : 0;
+      const baseName = 'unit_soldier' + (slv ? slv : '');
+      const atkImg = attacking ? SpriteImages.variant(baseName + '_atk', filter) : null;
+      const sImg = atkImg || SpriteImages.variant(baseName, filter);
       if (s.temp) drawGroundRing(s.x, s.y + 10, 16, 7, '#7bed9f', clamp(s.life / ABILITIES.reinf.life, 0.25, 1));
       if (sImg) {
         if (attacking) {
