@@ -87,7 +87,7 @@ function placeSpots(paths, map) {
     for (const s of samples) { const d = (s.x - x) * (s.x - x) + (s.y - y) * (s.y - y); if (d < m) m = d; }
     return Math.sqrt(m);
   };
-  const NEAR = 50, FAR = 112, SPACING = 60, MAXN = 16;
+  const NEAR = 52, FAR = 116, SPACING = 80, MAXN = 11;
   const cands = [];
   for (let y = 80; y <= 540; y += 22) {
     for (let x = 48; x <= 912; x += 22) {
@@ -168,7 +168,7 @@ function pointAt(path, d) {
 
 /* ---------------- 적 생성 ---------------- */
 // 난이도 글로벌 배수 (전반적 상향)
-const ENEMY_HP_MUL = 1.15, ENEMY_DMG_MUL = 1.3, BOSS_HP_MUL = 1.65, BOSS_DMG_MUL = 1.2, TOWER_DMG_MUL = 0.9;
+const ENEMY_HP_MUL = 1.1, ENEMY_DMG_MUL = 1.25, BOSS_HP_MUL = 1.65, BOSS_DMG_MUL = 1.2, TOWER_DMG_MUL = 0.9;
 function makeEnemy(typeId, pathId = 0) {
   const base = ENEMY_TYPES[typeId] || BOSS_TYPES[typeId];
   const isBoss = !!BOSS_TYPES[typeId];
