@@ -1043,6 +1043,7 @@ const HERO_ATK_DUR = 0.38;
 const TOWER_LV_FX = ['brightness(0.92)', null, 'saturate(1.2) brightness(1.07)'];
 
 function drawSpots() {
+  const illust = SpriteImages.variant('deco_spot', null);
   const img = Sprites.spot();
   const pulse = 0.5 + 0.5 * Math.sin(G.time * 3);
   for (let i = 0; i < G.towers.length; i++) {
@@ -1051,7 +1052,12 @@ function drawSpots() {
     // 건설 가능 표시: 바닥 타원 링 (맥동/선택)
     drawGroundRing(t.x, t.y + 15, 31, 13, '#ffe082', G.selected === i ? 1 : 0.45 + pulse * 0.3);
     shadow(t.x, t.y + 13, 16);
-    drawSprite(img, t.x, t.y + 17, 50);
+    if (illust) {
+      const bob = Math.sin(G.time * 3 + i) * 1.2;
+      drawIllust(illust, t.x, t.y + 26 + bob, 52);
+    } else {
+      drawSprite(img, t.x, t.y + 17, 50);
+    }
   }
 }
 

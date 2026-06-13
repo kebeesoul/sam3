@@ -1072,6 +1072,7 @@ const SpriteImages = (() => {
     'deco_pine', 'deco_tree', 'deco_bamboo', 'deco_rock', 'deco_hut',
     'deco_mountain', 'deco_bush', 'deco_gate', 'deco_fortress', 'deco_ship',
     'deco_range_snow', 'deco_range_rock', 'deco_grove', 'deco_peak2',
+    'deco_spot',
   ];
   const store = {};   // name -> { img, ready, bx, by, bw, bh }
   const varCache = new Map();
