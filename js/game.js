@@ -103,15 +103,22 @@ function placeSpots(paths, map) {
     }
   }
   const chosen = [];
-  // 1) 본진(성채=경로 끝점) 근처에 최소 2개 확보 → 마지막 방어선 전략 가능
+  // 1) 본진 성채 '앞 접근로'에 최소 2개 확보 → 성채 뒤가 아니라 적이 오는 길목에 배치
   const forts = [];
   for (const p of paths) {
     const e = p[p.length - 1];
-    if (!forts.some(f => Math.hypot(f[0] - e[0], f[1] - e[1]) < 40)) forts.push(e);
+    if (forts.some(f => Math.hypot(f.e[0] - e[0], f.e[1] - e[1]) < 40)) continue;
+    const tot = pathLength(p);
+    forts.push({ e, ap: pointAt(p, Math.max(0, tot - 64)) }); // 성채 직전 접근 지점
   }
   for (const f of forts) {
-    const near = cands.filter(c => { const d = Math.hypot(c.x - f[0], c.y - f[1]); return d > 30 && d < 175; });
-    near.sort((a, b) => Math.hypot(a.x - f[0], a.y - f[1]) - Math.hypot(b.x - f[0], b.y - f[1]));
+    // 접근로(ap) 가까이 + 성채(e)보다 '앞쪽'(=경로 진행 반대편, 적이 지나오는 쪽) 후보
+    const near = cands.filter(c => {
+      const da = Math.hypot(c.x - f.ap.x, c.y - f.ap.y);
+      const de = Math.hypot(c.x - f.e[0], c.y - f.e[1]);
+      return da < 120 && da <= de + 8;   // 성채보다 접근로에 더 가깝거나 비슷해야 함(뒤편 배제)
+    });
+    near.sort((a, b) => Math.hypot(a.x - f.ap.x, a.y - f.ap.y) - Math.hypot(b.x - f.ap.x, b.y - f.ap.y));
     let added = 0;
     for (const c of near) {
       if (chosen.every(s => Math.hypot(s.x - c.x, s.y - c.y) >= 56)) { chosen.push(c); if (++added >= 2) break; }
