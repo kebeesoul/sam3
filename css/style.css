@@ -435,3 +435,52 @@ canvas#game {
   .sc-name { font-size: 14px; }
   .big-btn { padding: 14px 36px; }
 }
+
+/* ---------------- 전투 보급기 바 ---------------- */
+#ability-bar {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  display: flex;
+  gap: 10px;
+  z-index: 5;
+}
+.abil-btn {
+  position: relative;
+  width: 58px; height: 58px;
+  border-radius: 12px;
+  border: 2px solid #6a5638;
+  background: radial-gradient(#3a2e1e, #1c150d);
+  color: #e8dcc0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+}
+.abil-btn .ab-ic { font-size: 28px; line-height: 1; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.6)); }
+.abil-btn .ab-cd {
+  position: absolute; bottom: 2px; left: 0; right: 0;
+  text-align: center; font-size: 11px; font-weight: bold; color: #ffd75e;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+}
+.abil-btn .ab-key {
+  position: absolute; top: 2px; right: 4px;
+  font-size: 9px; color: #b8a888;
+}
+.abil-btn.ready { border-color: #e8b84a; box-shadow: 0 0 12px rgba(232,184,74,0.5); }
+.abil-btn.disabled { opacity: 0.5; cursor: not-allowed; }
+.abil-btn.aiming {
+  border-color: #ffe27a;
+  box-shadow: 0 0 18px rgba(255,226,122,0.85);
+  animation: pulse 0.9s infinite;
+  transform: scale(1.06);
+}
+.abil-btn:active { transform: scale(0.93); }
+
+@media (max-width: 720px) {
+  #ability-bar { left: 8px; bottom: 8px; gap: 7px; }
+  .abil-btn { width: 50px; height: 50px; }
+  .abil-btn .ab-ic { font-size: 24px; }
+}
