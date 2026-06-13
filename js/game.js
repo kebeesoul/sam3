@@ -180,6 +180,26 @@ function nearestPathPoint(x, y) {
   return best;
 }
 
+/* 막사 사거리 안에서 창병 집결지를 옮긴다 (경로 위로 스냅) */
+function setRally(t, x, y) {
+  const range = TOWER_TYPES.barracks.levels[t.level].range;
+  const path = G.stage.path, total = pathLength(path);
+  let best = null, bestD = Infinity;
+  for (let d = 0; d <= total; d += 8) {
+    const p = pointAt(path, d);
+    if (Math.hypot(p.x - t.x, p.y - t.y) > range) continue;  // 사거리 밖 경로는 제외
+    const dd = Math.hypot(p.x - x, p.y - y);
+    if (dd < bestD) { bestD = dd; best = { x: p.x, y: p.y, d }; }
+  }
+  if (!best) {
+    // 사거리 안에 경로가 없으면 클릭 지점을 사거리로 클램프
+    const a = Math.atan2(y - t.y, x - t.x);
+    const r = Math.min(Math.hypot(x - t.x, y - t.y), range);
+    best = { x: t.x + Math.cos(a) * r, y: t.y + Math.sin(a) * r };
+  }
+  t.rally = best;
+}
+
 function spawnHero(heroId) {
   const def = HEROES[heroId];
   const start = pointAt(G.stage.path, pathLength(G.stage.path) * 0.65);
@@ -909,16 +929,20 @@ const TOWER_LV_FX = ['brightness(0.92)', null, 'saturate(1.2) brightness(1.07)']
 
 function drawSpots() {
   const img = Sprites.spot();
+  const pulse = 0.5 + 0.5 * Math.sin(G.time * 3);
   for (let i = 0; i < G.towers.length; i++) {
     const t = G.towers[i];
     if (t.type) continue;
+    // 건설 가능 표시: 맥동 링으로 주목도 강화
+    ctx.beginPath(); ctx.arc(t.x, t.y + 2, 26 + pulse * 4, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,224,130,${0.28 + pulse * 0.3})`; ctx.lineWidth = 2.5; ctx.stroke();
     if (G.selected === i) {
-      ctx.beginPath(); ctx.arc(t.x, t.y, 20, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(t.x, t.y + 2, 30, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(255,230,140,0.35)'; ctx.fill();
-      ctx.strokeStyle = 'rgba(255,220,110,0.9)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,220,110,0.95)'; ctx.lineWidth = 2.5; ctx.stroke();
     }
-    shadow(t.x, t.y + 8, 13);
-    drawSprite(img, t.x, t.y + 12, 30);
+    shadow(t.x, t.y + 11, 18);
+    drawSprite(img, t.x, t.y + 16, 48);
   }
 }
 
@@ -1425,6 +1449,7 @@ function openBuildMenu(idx) {
   } else {
     const def = TOWER_TYPES[t.type];
     menu.innerHTML = `<div class="bm-title">${def.levels[t.level].name} ★${t.level + 1}</div>`;
+    if (t.type === 'barracks') menu.innerHTML += `<div class="bm-hint">사거리 안을 클릭해 집결지 이동 🚩</div>`;
     if (t.level < def.levels.length - 1) {
       const next = def.levels[t.level + 1];
       const btn = document.createElement('button');
@@ -1506,12 +1531,26 @@ canvas.addEventListener('click', (ev) => {
     return;
   }
 
-  // 건설부지 / 타워 클릭
+  // 건설부지 / 타워 클릭 (빈 부지는 더 넓은 판정으로 누르기 쉽게)
   for (let i = 0; i < G.towers.length; i++) {
     const t = G.towers[i];
-    if (Math.hypot(t.x - x, t.y - y) < HIT_R) {
+    const r = t.type ? HIT_R : HIT_R + 14;
+    if (Math.hypot(t.x - x, t.y - y) < r) {
       openBuildMenu(i);
       return;
+    }
+  }
+
+  // 막사 선택 중이면 사거리 안 클릭으로 창병 집결지 이동
+  if (G.selected != null) {
+    const sel = G.towers[G.selected];
+    if (sel && sel.type === 'barracks') {
+      const range = TOWER_TYPES.barracks.levels[sel.level].range;
+      if (Math.hypot(sel.x - x, sel.y - y) <= range + 36) {
+        setRally(sel, x, y);
+        addFloater(sel.rally.x, sel.rally.y - 16, '집결지 이동', '#7bed9f', 13);
+        return;   // 선택 유지
+      }
     }
   }
   closeBuildMenu();
