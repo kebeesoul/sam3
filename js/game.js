@@ -53,6 +53,17 @@ const COARSE = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse
 const HIT_R = COARSE ? 32 : 22;
 const WAVE_GAP = 10; // '다음 공세까지' 제한 시간(초)
 
+// 타격감: 크리티컬 / 히트스톱
+const CRIT_CHANCE = 0.15, CRIT_MULT = 1.9;
+
+/* ---------------- 전투 소모 보급기 (킹덤러쉬식) ---------------- */
+const ABILITIES = {
+  fire:  { name: '화계(火計)', icon: '🔥', cost: 60, cd: 18, radius: 95, dmg: 110, burn: 12,
+           desc: '지정 지점에 불벼락을 떨궈 광역 화염 피해' },
+  reinf: { name: '원군(援軍)', icon: '🛡️', cost: 70, cd: 22, count: 3, hp: 130, dmg: [8, 13], life: 14,
+           desc: '지정 지점에 임시 의용군 3명을 소환해 길을 막는다' },
+};
+
 /* ---------------- 게임 상태 ---------------- */
 let G = null;          // 현재 스테이지 런타임 상태
 let screen = 'title';  // title | map | dialogue | game
@@ -80,8 +91,16 @@ function newGameState(stage) {
     won: false,
     time: 0,
     shake: 0,
+    hitstop: 0,
     heroDeaths: 0,
     earlyCalls: 0,
+    combo: 0,
+    comboT: 0,
+    moraleT: 0,
+    reinf: [],
+    abilities: { fire: { cd: 0 }, reinf: { cd: 0 } },
+    aiming: null,
+    aimX: W / 2, aimY: H / 2,
   };
 }
 
@@ -117,7 +136,7 @@ function makeEnemy(typeId) {
     hp: Math.round(base.hp * hpScale), maxHp: Math.round(base.hp * hpScale),
     progress: 0,
     x: G.stage.path[0][0], y: G.stage.path[0][1],
-    slow: 0, stun: 0, burn: 0, burnTime: 0,
+    slow: 0, stun: 0, burn: 0, burnTime: 0, flash: 0,
     blocker: null,         // 자신을 막고 있는 아군 유닛
     atkCd: 0,
     skillCd: isBoss ? 6 : 0,
@@ -202,11 +221,26 @@ function gainHeroXp(amount) {
 /* ---------------- 전투 처리 ---------------- */
 function dealDamage(enemy, amount, opts = {}) {
   if (enemy.dead) return;
-  let dmg = amount;
+  const crit = opts.crit || (opts.canCrit && Math.random() < CRIT_CHANCE);
+  let dmg = amount * (crit ? CRIT_MULT : 1);
   if (!opts.magic) dmg *= (1 - (enemy.shielded ? 0.9 : enemy.armor));
   enemy.hp -= dmg;
+  enemy.flash = 0.1;
   if (opts.burn) { enemy.burn = Math.max(enemy.burn, opts.burn); enemy.burnTime = 3; }
   if (opts.stun) enemy.stun = Math.max(enemy.stun, opts.stun);
+  if (!enemy.isBoss && !enemy.noFight && enemy.hp > 0) {
+    enemy.progress = Math.max(0, enemy.progress - (crit ? 5 : 2));
+  }
+  if (opts.canCrit || opts.showDmg) {
+    if (crit) {
+      addFloater(enemy.x + rand(-6, 6), enemy.y - 34, `${Math.round(dmg)}!`, '#ff5a3a', 19);
+      G.hitstop = Math.max(G.hitstop, 0.05);
+      G.shake = Math.max(G.shake, 0.18);
+      spawnParts(enemy.x, enemy.y - 12, 5, { color: ['#ffd75e', '#ff7a4a'], size: 3, speed: 90, up: 30, life: 0.4 });
+    } else {
+      addFloater(enemy.x + rand(-5, 5), enemy.y - 30, `${Math.round(dmg)}`, '#fff', 12);
+    }
+  }
   if (enemy.hp <= 0) {
     enemy.dead = true;
     G.gold += enemy.bounty;
@@ -214,14 +248,18 @@ function dealDamage(enemy, amount, opts = {}) {
     addEffect('poof', enemy.x, enemy.y, 0.4);
     spawnParts(enemy.x, enemy.y - 6, 6, { color: ['#c8b89a', '#a89878', '#888'], size: 3, speed: 50, up: 40, life: 0.5 });
     AudioSys.play('coin', 120);
-    // 영웅 경험치: 근처에서 잡으면 전액, 멀면 30% (부대 지원 몫)
+    G.combo++; G.comboT = 2.2;
+    if (G.combo >= 3) {
+      const bonus = G.combo >= 12 ? 4 : G.combo >= 7 ? 3 : G.combo >= 4 ? 1 : 0;
+      if (bonus > 0) G.gold += bonus;
+    }
     if (G.hero) {
       const near = !G.hero.dead && dist(G.hero, enemy) < 220;
       gainHeroXp(Math.max(1, Math.round(enemy.bounty * (near ? 1 : 0.3))));
     }
     if (enemy.isBoss) {
       addFloater(enemy.x, enemy.y - 20, `${enemy.name} 격파!`, '#ff6b6b', 22);
-      G.shake = 0.5;
+      G.shake = 0.5; G.hitstop = Math.max(G.hitstop, 0.14);
       spawnParts(enemy.x, enemy.y - 8, 26, { color: ['#ffd75e', '#f8922e', '#fff0c0'], size: 4, speed: 130, up: 60, life: 0.9 });
       AudioSys.play('boom');
     }
@@ -250,8 +288,12 @@ function fireProjectile(from, target, lvDef) {
 function update(dt) {
   if (!G || G.paused || G.over) return;
   dt *= G.speed;
+  if (G.hitstop > 0) { G.hitstop -= dt; dt *= 0.12; }
   G.time += dt;
   if (G.shake > 0) G.shake -= dt;
+  if (G.moraleT > 0) G.moraleT -= dt;
+  if (G.comboT > 0) { G.comboT -= dt; if (G.comboT <= 0) G.combo = 0; }
+  for (const k in G.abilities) if (G.abilities[k].cd > 0) G.abilities[k].cd -= dt;
 
   // 웨이브 진행
   if (G.waveIdx < 0 || (G.spawnQueue.length === 0 && G.enemies.length === 0)) {
@@ -271,8 +313,10 @@ function update(dt) {
 
   updateEnemies(dt);
   updateTowers(dt);
+  updateReinforcements(dt);
   updateHero(dt);
   updateProjectiles(dt);
+  updateAbilityBar();
 
   // 파티클
   for (const p of G.parts) {
@@ -295,7 +339,28 @@ function startNextWave() {
   G.waveTimer = 999;
   addFloater(W / 2, 80, `${G.waveIdx + 1}번째 공세!`, '#fff', 26);
   AudioSys.play('horn');
+  maybeEvent();
   updateHUD();
+}
+
+/* 전투 중 랜덤 이벤트: 3번째 공세부터, 약 40% 확률 */
+function maybeEvent() {
+  if (G.waveIdx < 2 || Math.random() > 0.4) return;
+  const roll = Math.random();
+  if (roll < 0.34) {
+    addFloater(W / 2, 120, '⚔ 복병 출현!', '#ff6b6b', 22);
+    AudioSys.play('horn');
+    for (let i = 0; i < 4; i++) { const e = makeEnemy('cavalry'); e.progress = -i * 16; G.enemies.push(e); }
+  } else if (roll < 0.7) {
+    const g = 35 + G.stage.id * 6;
+    G.gold += g;
+    addFloater(W / 2, 120, `🌾 군량 보급 +${g}`, '#ffd700', 22);
+    AudioSys.play('coin');
+  } else {
+    G.moraleT = 8;
+    addFloater(W / 2, 120, '🚩 사기충천! 공격 속도 상승', '#7bed9f', 22);
+    AudioSys.play('levelup');
+  }
 }
 
 function updateEnemies(dt) {
@@ -303,6 +368,7 @@ function updateEnemies(dt) {
   for (const e of G.enemies) {
     if (e.dead) continue;
     e.wobble += dt * 6;
+    if (e.flash > 0) e.flash -= dt;
     // 화상
     if (e.burnTime > 0) {
       e.burnTime -= dt;
@@ -379,19 +445,72 @@ function updateBossSkill(e, dt) {
 function allAllies() {
   const list = [];
   for (const t of G.towers) for (const s of t.soldiers) if (!s.dead) list.push(s);
+  for (const r of G.reinf) if (!r.dead) list.push(r);
   if (G.hero && !G.hero.dead) list.push(G.hero);
   return list;
 }
 function killAlly(a) {
   a.dead = true;
-  a.respawnT = a.kind === 'hero' ? a.def.respawn : TOWER_TYPES.barracks.levels[a.tower.level].respawn;
   for (const e of G.enemies) if (e.blocker === a) e.blocker = null;
   addEffect('poof', a.x, a.y, 0.4);
   if (a.kind === 'hero') {
+    a.respawnT = a.def.respawn;
     G.heroDeaths++;
     AudioSys.play('heroDie');
     addFloater(a.x, a.y, `${a.def.name} 부상! 후방 치료 중...`, '#aaa', 14);
+  } else if (!a.temp) {
+    a.respawnT = TOWER_TYPES.barracks.levels[a.tower.level].respawn;
   }
+}
+
+/* ---------------- 임시 원군(보급기) ---------------- */
+function makeReinf(x, y, idx) {
+  const a = ABILITIES.reinf;
+  const ang = idx * 2.1;
+  return {
+    kind: 'soldier', temp: true,
+    hp: a.hp, maxHp: a.hp, dmg: a.dmg,
+    x: x + Math.cos(ang) * 16, y: y + Math.sin(ang) * 16,
+    homeOff: ang, rally: { x, y },
+    target: null, atkCd: 0, dead: false, life: a.life,
+  };
+}
+function updateReinforcements(dt) {
+  for (const u of G.reinf) {
+    if (u.dead) continue;
+    u.life -= dt;
+    if (u.life <= 0) {
+      u.dead = true;
+      for (const e of G.enemies) if (e.blocker === u) e.blocker = null;
+      addEffect('poof', u.x, u.y, 0.4);
+      continue;
+    }
+    combatUnit(u, u.rally, 72, 62, dt);
+  }
+  G.reinf = G.reinf.filter(u => !u.dead);
+}
+
+/* ---------------- 보급기 발동 ---------------- */
+function resolveAbility(key, x, y) {
+  const a = ABILITIES[key], st = G.abilities[key];
+  if (G.gold < a.cost || st.cd > 0) return false;
+  G.gold -= a.cost;
+  st.cd = a.cd;
+  if (key === 'fire') {
+    addEffect('fireRain', x, y, 1.0, { radius: a.radius });
+    addEffect('boom', x, y, 0.4, { radius: a.radius });
+    spawnParts(x, y, 24, { color: ['#ffd75e', '#f8922e', '#ff5a2a'], size: 4, speed: 130, up: 50, life: 0.8 });
+    G.shake = 0.4; G.hitstop = Math.max(G.hitstop, 0.06);
+    AudioSys.play('ult');
+    for (const e of G.enemies) if (!e.dead && dist({ x, y }, e) <= a.radius) dealDamage(e, a.dmg, { magic: true, burn: a.burn, showDmg: true });
+  } else if (key === 'reinf') {
+    for (let i = 0; i < a.count; i++) G.reinf.push(makeReinf(x, y, i));
+    addEffect('ring', x, y, 0.5, { radius: 50, color: '#7bed9f' });
+    AudioSys.play('build');
+  }
+  addFloater(x, y - 40, a.name + '!', '#ffe9a8', 16);
+  updateHUD();
+  return true;
 }
 
 function updateTowers(dt) {
@@ -411,7 +530,7 @@ function updateTowers(dt) {
       if (dist(t, e) <= lv.range && (!best || e.progress > best.progress)) best = e;
     }
     if (best) {
-      t.cooldown = lv.rate;
+      t.cooldown = lv.rate * (G.moraleT > 0 ? 0.6 : 1);
       fireProjectile(t, best, lv);
       AudioSys.play(lv.proj, 70);
     }
@@ -460,7 +579,7 @@ function combatUnit(u, rally, engageRange, moveSpeed, dt, tower) {
       u.atkCd -= dt;
       if (u.atkCd <= 0) {
         u.atkCd = 1.0;
-        dealDamage(e, rollDmg(u.dmg));
+        dealDamage(e, rollDmg(u.dmg), { canCrit: u.kind === 'hero' });
         if (u.kind === 'hero') {
           u.attackT = HERO_ATK_DUR;
           u.attackFace = e.x >= u.x ? 1 : -1;
@@ -511,7 +630,7 @@ function updateHero(dt) {
       for (const e of G.enemies) if (!e.dead && dist(h, e) <= h.def.range && (!best || e.progress > best.progress)) best = e;
       if (best) {
         h.atkCd = 1.0;
-        dealDamage(best, rollDmg(h.dmgScaled), { magic: h.def.magic });
+        dealDamage(best, rollDmg(h.dmgScaled), { magic: h.def.magic, canCrit: true });
         h.attackT = HERO_ATK_DUR;
         h.attackFace = best.x >= h.x ? 1 : -1;
         const st = HERO_STRIKE[h.def.id];
@@ -591,9 +710,9 @@ function updateProjectiles(dt) {
         addEffect('boom', tgt.x, tgt.y, 0.35, { radius: lv.splash });
         spawnParts(tgt.x, tgt.y, 12, { color: ['#8a7a5a', '#6a5a44', '#f0a050'], size: 3.5, speed: 110, up: 70, life: 0.6 });
         AudioSys.play('boom', 150);
-        for (const e of G.enemies) if (!e.dead && dist(tgt, e) <= lv.splash) dealDamage(e, rollDmg(lv.dmg), { magic: lv.magic });
+        for (const e of G.enemies) if (!e.dead && dist(tgt, e) <= lv.splash) dealDamage(e, rollDmg(lv.dmg), { magic: lv.magic, canCrit: true });
       } else {
-        dealDamage(tgt, rollDmg(lv.dmg), { magic: lv.magic, burn: lv.burn });
+        dealDamage(tgt, rollDmg(lv.dmg), { magic: lv.magic, burn: lv.burn, canCrit: true });
         if (lv.proj === 'fire') addEffect('flame', tgt.x, tgt.y, 0.25);
       }
     } else {
@@ -674,6 +793,48 @@ function draw() {
   drawEffects();
   drawFloaters();
   drawWaveBanner();
+  drawCombo();
+  drawAiming();
+  ctx.restore();
+}
+
+function drawCombo() {
+  if (G.combo < 3) return;
+  const pulse = 1 + Math.max(0, 0.3 - (2.2 - G.comboT)) * 1.5;
+  ctx.save();
+  ctx.translate(64, 92);
+  ctx.scale(pulse, pulse);
+  ctx.font = 'bold 22px "Noto Serif KR", serif';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = G.combo >= 12 ? '#ff5a3a' : G.combo >= 7 ? '#ffb03a' : '#ffe27a';
+  ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 4;
+  ctx.strokeText(`連環 x${G.combo}`, 0, 0);
+  ctx.fillText(`連環 x${G.combo}`, 0, 0);
+  ctx.restore();
+  ctx.fillStyle = 'rgba(255,226,122,0.7)';
+  ctx.fillRect(64, 100, clamp(G.comboT / 2.2, 0, 1) * 90, 3);
+}
+
+function drawAiming() {
+  if (!G.aiming) return;
+  const x = G.aimX, y = G.aimY;
+  const a = ABILITIES[G.aiming];
+  ctx.save();
+  if (G.aiming === 'fire') {
+    ctx.beginPath(); ctx.arc(x, y, a.radius, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,90,40,0.18)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,140,60,0.9)'; ctx.lineWidth = 2; ctx.setLineDash([7, 5]); ctx.stroke();
+  } else {
+    for (let i = 0; i < a.count; i++) {
+      const ang = i * 2.1;
+      ctx.beginPath(); ctx.arc(x + Math.cos(ang) * 16, y + Math.sin(ang) * 16, 9, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(123,237,159,0.3)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(123,237,159,0.9)'; ctx.lineWidth = 2; ctx.setLineDash([5, 4]); ctx.stroke();
+    }
+  }
+  ctx.setLineDash([]);
+  ctx.font = '24px serif'; ctx.textAlign = 'center';
+  ctx.fillText(a.icon, x, y - (G.aiming === 'fire' ? a.radius + 6 : 30));
   ctx.restore();
 }
 
@@ -814,6 +975,7 @@ function drawUnits() {
   const list = [];
   for (const e of G.enemies) if (!e.dead) list.push({ kind: 'enemy', u: e, y: e.y });
   for (const t of G.towers) for (const s of t.soldiers) if (!s.dead) list.push({ kind: 'soldier', u: s, y: s.y });
+  for (const r of G.reinf) if (!r.dead) list.push({ kind: 'soldier', u: r, y: r.y });
   const h = G.hero;
   if (h) list.push({ kind: 'hero', u: h, y: h.y });
   list.sort((a, b) => a.y - b.y);
@@ -827,19 +989,23 @@ function drawUnits() {
       const face = (e.blocker && !e.blocker.dead) ? (e.blocker.x >= e.x ? 1 : -1) : (ahead.x >= e.x - 0.3 ? 1 : -1);
       const map = e.isBoss ? ['unit_general', BOSS_ILLUST_HUE[e.typeId]] : UNIT_ILLUST[e.typeId];
       const uImg = map ? SpriteImages.variant(map[0], map[1]) : null;
-      const hgt = uImg ? (e.isBoss ? 48 : 30) : (e.isBoss ? 38 : 26);
-      shadow(e.x, e.y + 9, e.isBoss ? 14 : 9);
+      const hgt = uImg ? (e.isBoss ? 66 : 42) : (e.isBoss ? 50 : 34);
+      shadow(e.x, e.y + 10, e.isBoss ? 19 : 13);
       if (e.shielded) {
-        ctx.beginPath(); ctx.arc(e.x, e.y - 8, 20, 0, Math.PI * 2);
+        ctx.beginPath(); ctx.arc(e.x, e.y - 10, 26, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(120,180,255,0.28)'; ctx.fill();
         ctx.strokeStyle = 'rgba(160,210,255,0.7)'; ctx.stroke();
       }
       if (uImg) {
         const sway = (e.stun > 0 || (e.blocker && !e.blocker.dead)) ? 0 : Math.sin(e.wobble * 1.8) * 0.07;
-        const bob = Math.abs(Math.sin(e.wobble * 1.8)) * 1.6;
-        drawIllust(uImg, e.x, e.y + 9 - bob, hgt, face, sway);
+        const bob = Math.abs(Math.sin(e.wobble * 1.8)) * 1.8;
+        drawIllust(uImg, e.x, e.y + 10 - bob, hgt, face, sway);
+        if (e.flash > 0) {
+          const wImg = SpriteImages.variant(map[0], 'brightness(0) invert(1)');
+          if (wImg) { ctx.globalAlpha = clamp(e.flash / 0.1, 0, 1) * 0.85; drawIllust(wImg, e.x, e.y + 10 - bob, hgt, face, sway); ctx.globalAlpha = 1; }
+        }
       } else {
-        drawSprite(Sprites.unit(e.typeId, frame), e.x, e.y + 9, hgt, face);
+        drawSprite(Sprites.unit(e.typeId, frame), e.x, e.y + 10, hgt, face);
       }
       if (e.burnTime > 0) miniFlame(e.x, e.y - hgt + 4, G.time);
       if (e.stun > 0) {
@@ -859,18 +1025,23 @@ function drawUnits() {
         roundRect(e.x - nw / 2, e.y - hgt - 16, nw, 14, 4); ctx.stroke();
         ctx.fillStyle = '#ffd9a0';
         ctx.fillText(e.name, e.x, e.y - hgt - 5);
-        drawHpBar(e.x, e.y - hgt + 1, 46, e.hp / e.maxHp, '#e67e22');
+        drawHpBar(e.x, e.y - hgt + 1, 58, e.hp / e.maxHp, '#e67e22');
       } else {
-        drawHpBar(e.x, e.y - hgt + 1, 24, e.hp / e.maxHp);
+        drawHpBar(e.x, e.y - hgt + 1, 32, e.hp / e.maxHp);
       }
     } else if (it.kind === 'soldier') {
       const s = u;
       const face = s.target && !s.target.dead ? (s.target.x >= s.x ? 1 : -1) : 1;
-      shadow(s.x, s.y + 8, 8);
-      const sImg = SpriteImages.variant('unit_soldier', null);
-      if (sImg) drawIllust(sImg, s.x, s.y + 8, 27, face, Math.sin(G.time * 6 + s.homeOff) * 0.04);
-      else drawSprite(Sprites.unit('soldier', Math.floor(G.time * 4 + s.homeOff) % 2), s.x, s.y + 8, 24, face);
-      drawHpBar(s.x, s.y - 22, 20, s.hp / s.maxHp, '#4aa4e0');
+      shadow(s.x, s.y + 9, 11);
+      const filter = s.temp ? 'saturate(1.5) brightness(1.18)' : null;
+      const sImg = SpriteImages.variant('unit_soldier', filter);
+      if (s.temp) {
+        ctx.beginPath(); ctx.arc(s.x, s.y + 7, 15, 0, Math.PI * 2 * clamp(s.life / ABILITIES.reinf.life, 0, 1));
+        ctx.strokeStyle = 'rgba(123,237,159,0.8)'; ctx.lineWidth = 2; ctx.stroke();
+      }
+      if (sImg) drawIllust(sImg, s.x, s.y + 9, 36, face, Math.sin(G.time * 6 + s.homeOff) * 0.04);
+      else drawSprite(Sprites.unit('soldier', Math.floor(G.time * 4 + s.homeOff) % 2), s.x, s.y + 9, 31, face);
+      drawHpBar(s.x, s.y - 28, 26, s.hp / s.maxHp, s.temp ? '#7bed9f' : '#4aa4e0');
     } else {
       const hh = u;
       if (hh.dead) {
@@ -887,34 +1058,33 @@ function drawUnits() {
         : hh.target && !hh.target.dead ? (hh.target.x >= hh.x ? 1 : -1)
         : (Math.abs(hh.tx - hh.x) > 2 ? (hh.tx >= hh.x ? 1 : -1) : 1);
       // 선택/오라
-      ctx.beginPath(); ctx.arc(hh.x, hh.y + 6, 13, 0, Math.PI * 2);
-      ctx.strokeStyle = hh.def.color; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(hh.x, hh.y + 7, 18, 0, Math.PI * 2);
+      ctx.strokeStyle = hh.def.color; ctx.lineWidth = 2.5;
       ctx.globalAlpha = 0.85; ctx.stroke(); ctx.globalAlpha = 1;
-      shadow(hh.x, hh.y + 8, 10);
+      shadow(hh.x, hh.y + 9, 14);
       const moving = Math.hypot(hh.tx - hh.x, hh.ty - hh.y) > 6 || (hh.target && !hh.target.dead);
       const baseImg = SpriteImages.variant('hero_' + hh.def.id, null);
       const atkImg = attacking ? SpriteImages.variant('hero_' + hh.def.id + '_atk', null) : null;
       const hImg = atkImg || baseImg;
       if (hImg) {
         if (attacking) {
-          // 전방 런지 + 앞으로 기울어지는 타격 모션
           const k = clamp(1 - hh.attackT / HERO_ATK_DUR, 0, 1);
-          const lunge = Math.sin(k * Math.PI) * 9;
+          const lunge = Math.sin(k * Math.PI) * 11;
           const tilt = Math.sin(k * Math.PI) * 0.11;
-          drawIllust(hImg, hh.x + lunge * face, hh.y + 9, 38, face, tilt);
+          drawIllust(hImg, hh.x + lunge * face, hh.y + 10, 50, face, tilt);
         } else {
           const sway = moving ? Math.sin(G.time * 9) * 0.06 : Math.sin(G.time * 2.2) * 0.018;
-          drawIllust(hImg, hh.x, hh.y + 9, 36, face, sway);
+          drawIllust(hImg, hh.x, hh.y + 10, 48, face, sway);
         }
       } else {
-        drawSprite(Sprites.unit(hh.def.id, moving ? Math.floor(G.time * 5) % 2 : 0), hh.x, hh.y + 9, 30, face);
+        drawSprite(Sprites.unit(hh.def.id, moving ? Math.floor(G.time * 5) % 2 : 0), hh.x, hh.y + 10, 40, face);
       }
-      ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
+      ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
       ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 3;
-      ctx.strokeText(`${hh.def.name} Lv.${hh.level}`, hh.x, hh.y - 30);
+      ctx.strokeText(`${hh.def.name} Lv.${hh.level}`, hh.x, hh.y - 42);
       ctx.fillStyle = '#fff';
-      ctx.fillText(`${hh.def.name} Lv.${hh.level}`, hh.x, hh.y - 30);
-      drawHpBar(hh.x, hh.y - 27, 32, hh.hp / hh.maxHp, '#3a9ae8');
+      ctx.fillText(`${hh.def.name} Lv.${hh.level}`, hh.x, hh.y - 42);
+      drawHpBar(hh.x, hh.y - 38, 40, hh.hp / hh.maxHp, '#3a9ae8');
       if (Math.hypot(hh.tx - hh.x, hh.ty - hh.y) > 8) {
         ctx.beginPath(); ctx.arc(hh.tx, hh.ty, 6, 0, Math.PI * 2);
         ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
@@ -1209,6 +1379,22 @@ function updateUltBtn() {
   $('#ult-cd').textContent = ready ? '준비!' : (h.dead ? '부상' : Math.ceil(h.ultCd) + 's');
 }
 
+function updateAbilityBar() {
+  const bar = $('#ability-bar');
+  if (!G) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  for (const key of Object.keys(ABILITIES)) {
+    const a = ABILITIES[key], st = G.abilities[key];
+    const el = $('#abil-' + key);
+    if (!el) continue;
+    const ready = st.cd <= 0 && G.gold >= a.cost;
+    el.classList.toggle('ready', ready);
+    el.classList.toggle('aiming', G.aiming === key);
+    el.classList.toggle('disabled', !ready);
+    el.querySelector('.ab-cd').textContent = st.cd > 0 ? Math.ceil(st.cd) + 's' : `💰${a.cost}`;
+  }
+}
+
 /* ---------------- 건설 메뉴 ---------------- */
 function openBuildMenu(idx) {
   G.selected = idx;
@@ -1287,6 +1473,13 @@ canvas.addEventListener('click', (ev) => {
   const x = (ev.clientX - rect.left) * W / rect.width;
   const y = (ev.clientY - rect.top) * H / rect.height;
 
+  // 보급기 조준 모드: 지점 클릭 시 발동
+  if (G.aiming) {
+    resolveAbility(G.aiming, clamp(x, 0, W), clamp(y, 0, H));
+    G.aiming = null;
+    return;
+  }
+
   // 웨이브 조기 시작 배너
   if ((G.waveIdx < 0 || (G.spawnQueue.length === 0 && G.enemies.length === 0)) && G.waveIdx < G.stage.waves.length - 1) {
     if (x > W / 2 - 150 && x < W / 2 + 150 && y > 14 && y < 48) {
@@ -1323,6 +1516,33 @@ canvas.addEventListener('click', (ev) => {
   }
   closeBuildMenu();
 });
+
+canvas.addEventListener('mousemove', (ev) => {
+  if (!G || !G.aiming) return;
+  const rect = canvas.getBoundingClientRect();
+  G.aimX = (ev.clientX - rect.left) * W / rect.width;
+  G.aimY = (ev.clientY - rect.top) * H / rect.height;
+});
+canvas.addEventListener('contextmenu', (ev) => {
+  if (G && G.aiming) { ev.preventDefault(); G.aiming = null; }
+});
+
+/* ---------------- 보급기 버튼 ---------------- */
+function toggleAiming(key) {
+  if (!G || G.over) return;
+  const a = ABILITIES[key], st = G.abilities[key];
+  if (st.cd > 0 || G.gold < a.cost) { addFloater(W / 2, 70, st.cd > 0 ? '재사용 대기 중' : '골드 부족', '#ff8a6a', 15); return; }
+  G.aiming = G.aiming === key ? null : key;
+  closeBuildMenu();
+}
+for (const key of Object.keys(ABILITIES)) {
+  const el = $('#abil-' + key);
+  if (el) {
+    el.title = `${ABILITIES[key].name} — ${ABILITIES[key].desc} (💰${ABILITIES[key].cost})`;
+    el.querySelector('.ab-ic').textContent = ABILITIES[key].icon;
+    el.onclick = (e) => { e.stopPropagation(); toggleAiming(key); };
+  }
+}
 
 /* ---------------- 다이얼로그 (시나리오) ---------------- */
 let dlg = { lines: [], idx: 0, onDone: null };
@@ -1393,6 +1613,7 @@ function startStage(stage, heroId) {
   AudioSys.startBgm();
   updateHUD();
   updateUltBtn();
+  updateAbilityBar();
 }
 
 function showOutro(stage, stars) {
@@ -1414,6 +1635,8 @@ function showStageMap() {
   AudioSys.stopBgm();
   G = null;
   $('#hud').style.display = 'none';
+  $('#ability-bar').style.display = 'none';
+  $('#btn-ult').style.display = 'none';
   closeBuildMenu();
   const wrap = $('#stage-list');
   wrap.innerHTML = '';
@@ -1484,8 +1707,10 @@ $('#btn-hero-back').onclick = () => showStageMap();
 window.addEventListener('keydown', (e) => {
   if (!G || screen !== 'game') return;
   if (e.key === 'q' || e.key === 'Q' || e.key === ' ') { e.preventDefault(); castUlt(); }
+  if (e.key === '1') toggleAiming('fire');
+  if (e.key === '2') toggleAiming('reinf');
   if (e.key === 'm' || e.key === 'M') $('#btn-sound').onclick();
-  if (e.key === 'Escape') closeBuildMenu();
+  if (e.key === 'Escape') { G.aiming = null; closeBuildMenu(); }
 });
 
 /* ---------------- 메인 루프 ---------------- */
