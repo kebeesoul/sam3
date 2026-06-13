@@ -79,7 +79,7 @@ const BOSS_TYPES = {
                 skill: { name: '발시담안', desc: '분노하여 공격력 상승' } },
   caoChun:    { name: '조순',   title: '호표기 대장', icon: '🐆', hp: 1600, speed: 60, armor: 0.4,  bounty: 190, livesCost: 2, dmg: [22, 32], range: 20,
                 skill: { name: '호표돌격', desc: '맹렬한 돌진' } },
-  caiMao:     { name: '채모',   title: '형주 수군도독', icon: '🚢', hp: 2000, speed: 34, armor: 0.5, bounty: 220, livesCost: 2, dmg: [20, 30], range: 100, ranged: true,
+  caiMao:     { name: '채모',   title: '형주 수군도독', icon: '🚢', hp: 1700, speed: 34, armor: 0.5, bounty: 220, livesCost: 2, dmg: [20, 30], range: 100, ranged: true,
                 skill: { name: '연환선진', desc: '수군 소환' } },
   zhangRen:   { name: '장임',   title: '서천 명장',  icon: '🎯', hp: 2200, speed: 42, armor: 0.45, bounty: 240, livesCost: 2, dmg: [24, 34], range: 110, ranged: true,
                 skill: { name: '매복사격', desc: '치명적인 저격' } },
@@ -387,7 +387,7 @@ const STAGES = [
       [['navy', 16, 0.8, 0], ['elite', 8, 1.8, 4], ['siege', 2, 6, 8]],
       [['siege', 4, 4.5, 0], ['navy', 16, 0.8, 3], ['tigerGuard', 6, 1.6, 6]],
       [['tigerGuard', 12, 1.1, 0], ['navy', 18, 0.7, 3], ['elite', 6, 2.0, 7]],
-      [['navy', 16, 0.8, 0], ['elite', 8, 1.7, 5], ['siege', 2, 6, 9], ['caiMao', 1, 1, 22]],
+      [['navy', 14, 0.85, 0], ['elite', 7, 1.8, 5], ['siege', 2, 6, 9], ['caiMao', 1, 1, 22]],
     ],
   },
   {

@@ -14,8 +14,9 @@ body {
   font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
   min-height: 100vh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;       /* 상단 정렬: 패널 높이가 바뀌어도 맵이 위아래로 밀리지 않음 */
   justify-content: center;
+  padding: 8px 0 14px;
 }
 
 #wrap {
@@ -493,7 +494,8 @@ canvas#game {
   position: relative;
   width: 100%;
   margin-top: 8px;
-  min-height: 92px;
+  height: 124px;            /* 고정 높이: 선택 시 레이아웃 변화 없음 */
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -562,7 +564,7 @@ canvas#game {
 .small-btn.danger:hover { background: #5a2820; }
 
 @media (max-width: 720px) {
-  #sel-panel { width: 100%; padding: 8px; min-height: 80px; }
+  #sel-panel { width: 100%; padding: 8px; height: 108px; }
   .sp-build { width: 64px; }
   .sp-bic, .sp-bic img { width: 32px; height: 32px; }
   #btn-ult { bottom: 10px; }
