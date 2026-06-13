@@ -461,7 +461,15 @@ function combatUnit(u, rally, engageRange, moveSpeed, dt, tower) {
       if (u.atkCd <= 0) {
         u.atkCd = 1.0;
         dealDamage(e, rollDmg(u.dmg));
-        addEffect('slash', e.x, e.y, 0.15, { ang: rand(-1.2, 1.2) });
+        if (u.kind === 'hero') {
+          u.attackT = HERO_ATK_DUR;
+          u.attackFace = e.x >= u.x ? 1 : -1;
+          const st = HERO_STRIKE[u.def.id];
+          addEffect('heroStrike', e.x, e.y, 0.3, { ...st, ang: Math.atan2(e.y - u.y, e.x - u.x) });
+          AudioSys.play('slash', 90);
+        } else {
+          addEffect('slash', e.x, e.y, 0.15, { ang: rand(-1.2, 1.2) });
+        }
       }
     }
   } else {
@@ -476,6 +484,7 @@ function updateHero(dt) {
   const h = G.hero;
   if (!h) return;
   if (h.ultCd > 0) h.ultCd -= dt;
+  if (h.attackT > 0) h.attackT -= dt;
   if (h.dead) {
     h.respawnT -= dt;
     if (h.respawnT <= 0) { h.dead = false; h.hp = h.maxHp * 0.6; addFloater(h.x, h.y, `${h.def.name} 복귀!`, '#7bed9f', 15); }
@@ -503,6 +512,10 @@ function updateHero(dt) {
       if (best) {
         h.atkCd = 1.0;
         dealDamage(best, rollDmg(h.dmgScaled), { magic: h.def.magic });
+        h.attackT = HERO_ATK_DUR;
+        h.attackFace = best.x >= h.x ? 1 : -1;
+        const st = HERO_STRIKE[h.def.id];
+        addEffect('heroStrike', best.x, best.y, 0.32, { ...st, ang: Math.atan2(best.y - h.y, best.x - h.x) });
         addEffect('bolt', best.x, best.y, 0.25);
       }
     }
@@ -519,6 +532,7 @@ function castUlt() {
   if (!h || h.dead || h.ultCd > 0) return;
   const u = h.def.ult;
   h.ultCd = u.cd;
+  h.attackT = 0.55;
   addFloater(h.x, h.y - 30, u.name + '!!', '#ffd700', 20);
   G.shake = 0.35;
   AudioSys.play('ult');
@@ -721,6 +735,15 @@ const BOSS_ILLUST_HUE = {
   xiahouYuan: 'hue-rotate(-18deg) saturate(1.45)',
 };
 const TOWER_ILLUST = { archer: 'tower_archer', barracks: 'tower_barracks', catapult: 'tower_catapult', fire: 'tower_fire' };
+/* 영웅별 무기 궤적 이펙트 (공격 시) */
+const HERO_STRIKE = {
+  liubei:     { kind: 'dualArc', color: '#ffe27a', color2: '#7adf8a' }, // 쌍고검 교차 베기
+  guanyu:     { kind: 'arc',     color: '#ff6a4a', color2: '#9be87a' }, // 청룡언월도 횡베기
+  zhangfei:   { kind: 'thrust',  color: '#caa6ff', color2: '#7a5aac' }, // 장팔사모 찌르기
+  zhaoyun:    { kind: 'thrust',  color: '#eaf6ff', color2: '#6ab2ff' }, // 용담창 찌르기
+  zhugeliang: { kind: 'glyph',   color: '#6ae8d8', color2: '#bff7ef' }, // 술법 문양
+};
+const HERO_ATK_DUR = 0.38;
 const TOWER_LV_FX = ['brightness(0.92)', null, 'saturate(1.2) brightness(1.07)'];
 
 function drawSpots() {
@@ -859,7 +882,9 @@ function drawUnits() {
         ctx.globalAlpha = 1;
         continue;
       }
-      const face = hh.target && !hh.target.dead ? (hh.target.x >= hh.x ? 1 : -1)
+      const attacking = hh.attackT > 0;
+      const face = attacking && hh.attackFace ? hh.attackFace
+        : hh.target && !hh.target.dead ? (hh.target.x >= hh.x ? 1 : -1)
         : (Math.abs(hh.tx - hh.x) > 2 ? (hh.tx >= hh.x ? 1 : -1) : 1);
       // 선택/오라
       ctx.beginPath(); ctx.arc(hh.x, hh.y + 6, 13, 0, Math.PI * 2);
@@ -867,10 +892,20 @@ function drawUnits() {
       ctx.globalAlpha = 0.85; ctx.stroke(); ctx.globalAlpha = 1;
       shadow(hh.x, hh.y + 8, 10);
       const moving = Math.hypot(hh.tx - hh.x, hh.ty - hh.y) > 6 || (hh.target && !hh.target.dead);
-      const hImg = SpriteImages.variant('hero_' + hh.def.id, null);
+      const baseImg = SpriteImages.variant('hero_' + hh.def.id, null);
+      const atkImg = attacking ? SpriteImages.variant('hero_' + hh.def.id + '_atk', null) : null;
+      const hImg = atkImg || baseImg;
       if (hImg) {
-        const sway = moving ? Math.sin(G.time * 9) * 0.06 : Math.sin(G.time * 2.2) * 0.018;
-        drawIllust(hImg, hh.x, hh.y + 9, 36, face, sway);
+        if (attacking) {
+          // 전방 런지 + 앞으로 기울어지는 타격 모션
+          const k = clamp(1 - hh.attackT / HERO_ATK_DUR, 0, 1);
+          const lunge = Math.sin(k * Math.PI) * 9;
+          const tilt = Math.sin(k * Math.PI) * 0.11;
+          drawIllust(hImg, hh.x + lunge * face, hh.y + 9, 38, face, tilt);
+        } else {
+          const sway = moving ? Math.sin(G.time * 9) * 0.06 : Math.sin(G.time * 2.2) * 0.018;
+          drawIllust(hImg, hh.x, hh.y + 9, 36, face, sway);
+        }
       } else {
         drawSprite(Sprites.unit(hh.def.id, moving ? Math.floor(G.time * 5) % 2 : 0), hh.x, hh.y + 9, 30, face);
       }
@@ -953,6 +988,55 @@ function drawEffects() {
   for (const ef of G.effects) {
     const k = 1 - ef.t / ef.dur;
     switch (ef.type) {
+      case 'heroStrike': {
+        const sweep = Math.min(1, k * 1.6);
+        ctx.save();
+        ctx.translate(ef.x, ef.y - 6);
+        ctx.lineCap = 'round';
+        if (ef.kind === 'arc') {
+          // 넓은 횡베기 호 (관우)
+          ctx.rotate(ef.ang);
+          for (const [r, w, c] of [[17, 5, ef.color], [12, 3, ef.color2]]) {
+            ctx.strokeStyle = c; ctx.globalAlpha = (1 - k);
+            ctx.lineWidth = w * (1 - k * 0.5);
+            ctx.beginPath(); ctx.arc(0, 0, r + k * 8, -1.5, -1.5 + 3.0 * sweep); ctx.stroke();
+          }
+        } else if (ef.kind === 'dualArc') {
+          // 쌍검 교차 베기 (유비)
+          ctx.rotate(ef.ang);
+          ctx.globalAlpha = (1 - k);
+          ctx.strokeStyle = ef.color; ctx.lineWidth = 3.5;
+          ctx.beginPath(); ctx.arc(0, -3, 13 + k * 6, -2.2, -2.2 + 2.6 * sweep); ctx.stroke();
+          ctx.strokeStyle = ef.color2; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(0, 3, 13 + k * 6, 2.2, 2.2 - 2.6 * sweep, true); ctx.stroke();
+        } else if (ef.kind === 'thrust') {
+          // 창 찌르기 섬광 (장비/조운)
+          ctx.rotate(ef.ang);
+          const len = 26 * sweep;
+          ctx.globalAlpha = (1 - k);
+          const lg = ctx.createLinearGradient(-len, 0, 8, 0);
+          lg.addColorStop(0, 'rgba(0,0,0,0)');
+          lg.addColorStop(1, ef.color);
+          ctx.strokeStyle = lg; ctx.lineWidth = 5 * (1 - k * 0.4);
+          ctx.beginPath(); ctx.moveTo(-len, 0); ctx.lineTo(8, 0); ctx.stroke();
+          ctx.fillStyle = ef.color2;
+          ctx.beginPath(); ctx.arc(8, 0, 4.5 * (1 - k), 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(8, 0, 2 * (1 - k), 0, Math.PI * 2); ctx.fill();
+        } else if (ef.kind === 'glyph') {
+          // 술법 문양 (제갈량)
+          ctx.globalAlpha = (1 - k);
+          ctx.strokeStyle = ef.color; ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.arc(0, 0, 8 + k * 16, 0, Math.PI * 2); ctx.stroke();
+          ctx.save();
+          ctx.rotate(k * 2.4);
+          ctx.strokeStyle = ef.color2; ctx.lineWidth = 1.8;
+          ctx.strokeRect(-(6 + k * 10), -(6 + k * 10), (6 + k * 10) * 2, (6 + k * 10) * 2);
+          ctx.restore();
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+        break; }
       case 'slash': {
         ctx.save();
         ctx.translate(ef.x, ef.y - 6);

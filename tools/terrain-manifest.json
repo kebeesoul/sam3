@@ -1,26 +1,32 @@
 [
  {
-  "name": "deco_range_snow",
-  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_232135_c0fd8c5b-f7f1-460b-b2d8-a820cbef52ac.png",
-  "maxW": 640,
+  "name": "hero_liubei_atk",
+  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_000207_686f0f3d-1198-475e-bbe4-b7769e4b88a4.png",
+  "maxW": 256,
   "quality": 0.92
  },
  {
-  "name": "deco_range_rock",
-  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_232139_594acfd3-0169-41af-b248-3ff3f3c2d89b.png",
-  "maxW": 640,
+  "name": "hero_guanyu_atk",
+  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_000209_bc4212fd-34e5-46f1-a541-169996f7c5cd.png",
+  "maxW": 256,
   "quality": 0.92
  },
  {
-  "name": "deco_grove",
-  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_232142_4875d1c0-dc4f-48b0-b0c8-abca9b74fb62.png",
-  "maxW": 512,
+  "name": "hero_zhangfei_atk",
+  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_000213_a12eb7cc-035a-4c57-ae40-8d896e696029.png",
+  "maxW": 256,
   "quality": 0.92
  },
  {
-  "name": "deco_peak2",
-  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260612_232146_15da5f2f-139e-4100-9095-555bfae3d6cf.png",
-  "maxW": 320,
+  "name": "hero_zhaoyun_atk",
+  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_000216_c6e98b75-d442-4b73-9451-bd815a7751fb.png",
+  "maxW": 256,
+  "quality": 0.92
+ },
+ {
+  "name": "hero_zhugeliang_atk",
+  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_000218_4b31c6e1-6daf-4345-b1e9-74dce2d28f09.png",
+  "maxW": 256,
   "quality": 0.92
  }
 ]
