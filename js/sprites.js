@@ -525,7 +525,7 @@ const Sprites = (() => {
     if (terrainStageId === stage.id && terrainCache && terrainReadyKey === readyKey) return terrainCache;
     terrainStageId = stage.id;
     terrainReadyKey = readyKey;
-    const W = 960, H = 600;
+    const W = (stage.world && stage.world.w) || 960, H = (stage.world && stage.world.h) || 600;
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const g = c.getContext('2d');
@@ -994,14 +994,13 @@ const Sprites = (() => {
     }
 
     /* 5) 출발 군문 / 도착 요새 (일러스트 우선) */
-    const seenGate = new Set(), seenFort = new Set();
+    // 출발 군문(게이트)만 지형에 그린다. 도착 요새(성채)는 게임에서 G.forts 위치로 그린다(에디터 이동 반영).
+    const seenGate = new Set();
     for (const pp of paths) {
-      const s0 = pp[0], e0 = pp[pp.length - 1];
+      const s0 = pp[0];
       const gx = Math.max(40, Math.min(W - 40, s0[0])), gy = Math.max(54, Math.min(H - 8, s0[1] + 26));
-      const fx = Math.max(50, Math.min(W - 50, e0[0])), fy = Math.max(64, Math.min(H - 8, e0[1] + 30));
-      const gk = (gx | 0) + ',' + (gy | 0), fk = (fx | 0) + ',' + (fy | 0);
+      const gk = (gx | 0) + ',' + (gy | 0);
       if (!seenGate.has(gk)) { seenGate.add(gk); if (!drawDecoSprite(g, 'deco_gate', gx, gy, 86, false)) drawGate(g, gx, gy - 26); }
-      if (!seenFort.has(fk)) { seenFort.add(fk); if (!drawDecoSprite(g, 'deco_fortress', fx, fy, 128, false)) drawFortress(g, fx, fy - 30); }
     }
 
     /* 6) 비네트 */
@@ -1067,11 +1066,16 @@ const SpriteImages = (() => {
     'tower_archer', 'tower_barracks', 'tower_catapult', 'tower_fire',
     'unit_yellowturban', 'unit_infantry', 'unit_archer', 'unit_cavalry',
     'unit_siege', 'unit_soldier', 'unit_general',
+    'unit_yellowturban_atk', 'unit_infantry_atk', 'unit_archer_atk', 'unit_cavalry_atk',
+    'unit_siege_atk', 'unit_soldier_atk', 'unit_general_atk',
+    'unit_soldier1', 'unit_soldier1_atk', 'unit_soldier2', 'unit_soldier2_atk',
     'hero_liubei', 'hero_guanyu', 'hero_zhangfei', 'hero_zhaoyun', 'hero_zhugeliang',
     'hero_liubei_atk', 'hero_guanyu_atk', 'hero_zhangfei_atk', 'hero_zhaoyun_atk', 'hero_zhugeliang_atk',
     'deco_pine', 'deco_tree', 'deco_bamboo', 'deco_rock', 'deco_hut',
     'deco_mountain', 'deco_bush', 'deco_gate', 'deco_fortress', 'deco_ship',
     'deco_range_snow', 'deco_range_rock', 'deco_grove', 'deco_peak2',
+    'deco_spot',
+    'ability_fire', 'ability_reinf',
   ];
   const store = {};   // name -> { img, ready, bx, by, bw, bh }
   const varCache = new Map();

@@ -1,0 +1,8 @@
+[
+ { "name": "unit_soldier",      "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_161748_8ec618ee-65e5-4e32-a40d-a4ddeee9af45.png", "maxW": 256, "quality": 0.92, "ext": "png" },
+ { "name": "unit_soldier_atk",  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_161713_8298ebff-acbf-4650-a064-0b1e10af44a6.png", "maxW": 256, "quality": 0.92, "ext": "png" },
+ { "name": "unit_soldier1",     "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_161716_4351eec1-0526-4a28-bfb0-1aafaba74556.png", "maxW": 256, "quality": 0.92, "ext": "png" },
+ { "name": "unit_soldier1_atk", "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_161722_5005a2a3-e2dd-4e8a-a0e5-8364eb397afc.png", "maxW": 256, "quality": 0.92, "ext": "png" },
+ { "name": "unit_soldier2",     "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_161725_63af77c5-979c-4c4c-89e7-2e3a935e8f8d.png", "maxW": 256, "quality": 0.92, "ext": "png" },
+ { "name": "unit_soldier2_atk", "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_161727_584d89e6-4945-4e44-9443-9ac2a0b5576e.png", "maxW": 256, "quality": 0.92, "ext": "png" }
+]
