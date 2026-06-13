@@ -617,3 +617,7 @@ body.editing #stage { margin-top: 96px; }
   opacity: 0; transition: opacity .2s; pointer-events: none;
 }
 #ed-toast.show { opacity: 1; }
+
+/* 판매 확인 (하단 패널, 게임 정지 없음) */
+.sp-confirm-row { align-items: center; gap: 8px; }
+.sp-confirm-q { color: #ffcf9a; font-size: 13px; font-weight: 700; }

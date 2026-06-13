@@ -294,7 +294,9 @@ function makeEnemy(typeId, pathId = 0) {
   const path = G.paths[pathId] || G.paths[0];
   // 스테이지가 높을수록 적 체력·공격력 상향 (약 20% → 40%)
   const stageBuff = 1.2 + 0.2 * (G.stage.id / 9);
-  const hpScale = (isBoss ? BOSS_HP_MUL : (1.08 + G.stage.id * 0.07) * ENEMY_HP_MUL) * stageBuff;
+  // 적 에너지(체력) 추가 상향 (스테이지 1부터, +20% → +40%)
+  const energyBuff = 1.2 + 0.2 * (G.stage.id / 9);
+  const hpScale = (isBoss ? BOSS_HP_MUL : (1.08 + G.stage.id * 0.07) * ENEMY_HP_MUL) * stageBuff * energyBuff;
   const hp = Math.round(base.hp * hpScale);
   const dm = (isBoss ? BOSS_DMG_MUL : ENEMY_DMG_MUL) * stageBuff;
   const dmg = [base.dmg[0] * dm, base.dmg[1] * dm];
@@ -631,7 +633,7 @@ function updateEnemies(dt) {
     // 이동
     let slowMul = e.slow > 0 ? 0.5 : 1;
     if (e.slow > 0) e.slow -= dt;
-    if (keepsAdvancing(e) && e.blocker && !e.blocker.dead) slowMul = Math.min(slowMul, 0.5); // 교전 중 보스/공성차 50% 전진
+    if (keepsAdvancing(e) && e.blocker && !e.blocker.dead) slowMul = Math.min(slowMul, e.isBoss ? 0.625 : 0.5); // 교전 중 전진: 공성차 50%, 적 영웅(보스)은 25% 더 빠른 62.5%
     e.progress += e.speed * slowMul * dt;
     const p = pointAt(e.path, e.progress);
     e.x = p.x; e.y = p.y;
@@ -1878,12 +1880,14 @@ function towerStatHtml(t) {
 }
 
 function selectAt(kind, i, ref) {
+  // 다른 대상을 선택하면 판매 확인 상태 해제 (같은 타워 재선택이 아니면)
+  if (!(kind === 'tower' && G.sel && G.sel.kind === 'tower' && G.sel.i === i)) G.confirmSell = false;
   G.sel = { kind, i, ref };
   G.selected = (kind === 'tower' || kind === 'spot') ? i : null;
   renderSelPanel();
 }
 function selectClear() {
-  if (G) { G.sel = null; G.selected = null; G.selUI = null; }
+  if (G) { G.sel = null; G.selected = null; G.selUI = null; G.confirmSell = false; }
   renderSelPanel();
 }
 
@@ -1935,39 +1939,52 @@ function renderSelPanel() {
     const stats = document.createElement('div'); stats.className = 'sp-stats';
     stats.innerHTML = towerStatHtml(t);
     panel.appendChild(stats);
-    const acts = document.createElement('div'); acts.className = 'sp-acts';
-    if (t.level < def.levels.length - 1) {
-      const next = def.levels[t.level + 1];
-      const up = document.createElement('button');
-      up.className = 'sp-act up';
-      up.innerHTML = `⬆ ${next.name} <b>💰${next.cost}</b>`;
-      up.onclick = (e) => {
-        e.stopPropagation();
-        if (G.gold < next.cost) return;
-        G.gold -= next.cost; t.level++;
-        if (t.type === 'barracks') for (const s of t.soldiers) if (!s.dead) { s.maxHp = next.soldierHp; s.hp = next.soldierHp; s.dmg = next.soldierDmg; }
-        AudioSys.play('build'); updateHUD();
-        selectAt('tower', sel.i, t);
-      };
-      G.selUI.costBtns.push({ el: up, cost: next.cost });
-      acts.appendChild(up);
-    }
     let spent = 0; for (let l = 0; l <= t.level; l++) spent += def.levels[l].cost;
     const refund = Math.floor(spent * 0.6);
-    const sell = document.createElement('button');
-    sell.className = 'sp-act sell';
-    sell.innerHTML = `🗑 판매 <b>+💰${refund}</b>`;
-    sell.onclick = (e) => {
-      e.stopPropagation();
-      if (!confirm(`정말 판매하시겠습니까? (+💰${refund} 환급)`)) return;
+    const doSell = () => {
       G.gold += refund;
       for (const en of G.enemies) if (en.blocker && en.blocker.tower === t) en.blocker = null;
       t.type = null; t.level = 0; t.soldiers = [];
+      G.confirmSell = false;
       AudioSys.play('sell'); updateHUD();
       selectClear();
     };
-    acts.appendChild(sell);
-    panel.appendChild(acts);
+    if (G.confirmSell) {
+      // 게임을 멈추지 않고 하단 패널에서 판매 확인
+      const cf = document.createElement('div'); cf.className = 'sp-acts sp-confirm-row';
+      const q = document.createElement('span'); q.className = 'sp-confirm-q';
+      q.textContent = `정말 판매할까요? (+💰${refund} 환급)`;
+      const yes = document.createElement('button'); yes.className = 'sp-act sell'; yes.textContent = '예, 판매';
+      yes.onclick = (e) => { e.stopPropagation(); doSell(); };
+      const no = document.createElement('button'); no.className = 'sp-act'; no.textContent = '아니오';
+      no.onclick = (e) => { e.stopPropagation(); G.confirmSell = false; renderSelPanel(); };
+      cf.appendChild(q); cf.appendChild(yes); cf.appendChild(no);
+      panel.appendChild(cf);
+    } else {
+      const acts = document.createElement('div'); acts.className = 'sp-acts';
+      if (t.level < def.levels.length - 1) {
+        const next = def.levels[t.level + 1];
+        const up = document.createElement('button');
+        up.className = 'sp-act up';
+        up.innerHTML = `⬆ ${next.name} <b>💰${next.cost}</b>`;
+        up.onclick = (e) => {
+          e.stopPropagation();
+          if (G.gold < next.cost) return;
+          G.gold -= next.cost; t.level++;
+          if (t.type === 'barracks') for (const s of t.soldiers) if (!s.dead) { s.maxHp = next.soldierHp; s.hp = next.soldierHp; s.dmg = next.soldierDmg; }
+          AudioSys.play('build'); updateHUD();
+          selectAt('tower', sel.i, t);
+        };
+        G.selUI.costBtns.push({ el: up, cost: next.cost });
+        acts.appendChild(up);
+      }
+      const sell = document.createElement('button');
+      sell.className = 'sp-act sell';
+      sell.innerHTML = `🗑 판매 <b>+💰${refund}</b>`;
+      sell.onclick = (e) => { e.stopPropagation(); G.confirmSell = true; renderSelPanel(); };
+      acts.appendChild(sell);
+      panel.appendChild(acts);
+    }
 
   } else if (sel.kind === 'fort') {
     const f = sel.ref, lv = FORT_LEVELS[f.level];
