@@ -23,25 +23,29 @@
       <button class="hud-btn" id="btn-sound" title="음소거 (M)">🔊</button>
       <button class="hud-btn" id="btn-speed">▶ x1</button>
       <button class="hud-btn" id="btn-pause">⏸ 정지</button>
+      <button class="hud-btn" id="btn-restart">↻ 다시</button>
       <button class="hud-btn" id="btn-quit">🏳️ 포기</button>
     </div>
   </div>
 
-  <canvas id="game" width="960" height="600"></canvas>
+  <!-- 전장(캔버스 + 위에 겹치는 코너 컨트롤) -->
+  <div id="stage">
+    <canvas id="game" width="960" height="600"></canvas>
 
-  <!-- 필살기 버튼 -->
-  <button id="btn-ult" style="display:none" title="필살기 (Q 또는 스페이스)">
-    <span id="ult-icon">⚡</span>
-    <span id="ult-cd"></span>
-  </button>
+    <!-- 필살기 버튼 -->
+    <button id="btn-ult" style="display:none" title="필살기 (Q 또는 스페이스)">
+      <span id="ult-icon">⚡</span>
+      <span id="ult-cd"></span>
+    </button>
 
-  <!-- 전투 보급기 (쿨타임제) -->
-  <div id="ability-bar" style="display:none">
-    <button class="abil-btn" id="abil-fire" title="화계"><span class="ab-ic">🔥</span><span class="ab-cd"></span><span class="ab-key">1</span></button>
-    <button class="abil-btn" id="abil-reinf" title="원군"><span class="ab-ic">🛡️</span><span class="ab-cd"></span><span class="ab-key">2</span></button>
+    <!-- 전투 보급기 (쿨타임제) -->
+    <div id="ability-bar" style="display:none">
+      <button class="abil-btn" id="abil-fire" title="화계"><span class="ab-ic">🔥</span><span class="ab-cd"></span><span class="ab-key">1</span></button>
+      <button class="abil-btn" id="abil-reinf" title="원군"><span class="ab-ic">🛡️</span><span class="ab-cd"></span><span class="ab-key">2</span></button>
+    </div>
   </div>
 
-  <!-- 선택 패널 (하단 중앙): 유닛/타워 스펙 + 건설/업그레이드/판매 -->
+  <!-- 선택 패널 (맵 아래): 유닛/타워 스펙 + 건설/업그레이드/판매 -->
   <div id="sel-panel" style="display:none"></div>
 
   <!-- 타이틀 -->

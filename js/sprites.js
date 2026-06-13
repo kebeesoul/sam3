@@ -531,7 +531,8 @@ const Sprites = (() => {
     const g = c.getContext('2d');
     const rnd = mulberry32(stage.id * 7919 + 13);
     const th = stage.theme;
-    const path = stage.path;
+    const paths = stage.paths || [stage.path];
+    const path = paths[0];
 
     /* 1) 바닥: 잔디 텍스처 (테마 색조) — 없으면 기존 절차 생성 */
     const grassPat = TerrainTex.pattern(g, 'tex_grass', 230, THEME_TINT[th.deco]);
@@ -723,22 +724,26 @@ const Sprites = (() => {
       g.stroke();
     }
 
-    /* 3) 길: 흙 텍스처를 마스크로 깔고 가장자리 디테일 */
-    strokePathOn(g, path, 56, 'rgba(30,22,8,0.30)'); // 부드러운 외곽 음영
-    strokePathOn(g, path, 49, 'rgba(58,42,20,0.55)'); // 진한 테두리
+    /* 3) 길(들): 흙 텍스처를 마스크로 깔고 가장자리 디테일 */
+    for (const pp of paths) {
+      strokePathOn(g, pp, 56, 'rgba(30,22,8,0.30)');
+      strokePathOn(g, pp, 49, 'rgba(58,42,20,0.55)');
+    }
     const dirtPat = TerrainTex.pattern(g, 'tex_dirt', 240);
     if (dirtPat) {
       const m = document.createElement('canvas');
       m.width = W; m.height = H;
       const mg = m.getContext('2d');
-      strokePathOn(mg, path, 44, '#fff');
+      for (const pp of paths) strokePathOn(mg, pp, 44, '#fff');
       mg.globalCompositeOperation = 'source-in';
       mg.fillStyle = TerrainTex.pattern(mg, 'tex_dirt', 240);
       mg.fillRect(0, 0, W, H);
       g.drawImage(m, 0, 0);
     } else {
-      strokePathOn(g, path, 44, th.path);
-      strokePathOn(g, path, 28, shade(th.path.startsWith('#') ? th.path : '#c2a878', 12));
+      for (const pp of paths) {
+        strokePathOn(g, pp, 44, th.path);
+        strokePathOn(g, pp, 28, shade(th.path.startsWith('#') ? th.path : '#c2a878', 12));
+      }
     }
     // 길 가장자리를 울퉁불퉁하게: 풀이 잠식하고 흙이 번지는 불규칙 경계
     {
@@ -787,23 +792,26 @@ const Sprites = (() => {
     // 다리 (강을 건너는 구간)
     if (map.bridge) drawBridge(g, map.bridge);
 
-    // 닳은 중앙 자국 + 수레바퀴 홈 (살짝 굽이치게)
-    strokePathOn(g, path, 13, 'rgba(255,238,190,0.10)');
-    strokePathOn(g, path, 30, 'rgba(60,40,15,0.07)');
-    {
-      // 굽이치는 수레바퀴 홈 2줄
+    // 닳은 중앙 자국 + 수레바퀴 홈 (경로별, 살짝 굽이치게)
+    for (const pp of paths) {
+      strokePathOn(g, pp, 13, 'rgba(255,238,190,0.10)');
+      strokePathOn(g, pp, 30, 'rgba(60,40,15,0.07)');
+      const total = pathLength(pp);
+      const samp = [];
+      for (let d = 0; d <= total; d += 16) samp.push(pointAt(pp, d));
       for (const sgn of [-1, 1]) {
         g.strokeStyle = 'rgba(54,38,16,0.18)'; g.lineWidth = 2.5;
         g.beginPath();
-        for (let i = 0; i < pathPts.length; i++) {
-          const p = pathPts[i];
-          if (inWater(p.x, p.y)) { g.stroke(); g.beginPath(); continue; }
-          const a = pathPts[Math.max(0, i - 1)], b = pathPts[Math.min(pathPts.length - 1, i + 1)];
+        let started = false;
+        for (let i = 0; i < samp.length; i++) {
+          const p = samp[i];
+          if (inWater(p.x, p.y)) { if (started) g.stroke(); g.beginPath(); started = false; continue; }
+          const a = samp[Math.max(0, i - 1)], b = samp[Math.min(samp.length - 1, i + 1)];
           const dl = Math.hypot(b.x - a.x, b.y - a.y) || 1;
           const nx = -(b.y - a.y) / dl, ny = (b.x - a.x) / dl;
           const wob = Math.sin(i * 0.6) * 2;
           const ox = nx * (sgn * 6 + wob), oy = ny * (sgn * 6 + wob);
-          if (i === 0) g.moveTo(p.x + ox, p.y + oy); else g.lineTo(p.x + ox, p.y + oy);
+          if (!started) { g.moveTo(p.x + ox, p.y + oy); started = true; } else g.lineTo(p.x + ox, p.y + oy);
         }
         g.stroke();
       }
@@ -983,11 +991,15 @@ const Sprites = (() => {
     }
 
     /* 5) 출발 군문 / 도착 요새 (일러스트 우선) */
-    const s0 = path[0], e0 = path[path.length - 1];
-    const gx = Math.max(40, Math.min(W - 40, s0[0])), gy = Math.max(54, Math.min(H - 8, s0[1] + 26));
-    const fx = Math.max(50, Math.min(W - 50, e0[0])), fy = Math.max(64, Math.min(H - 8, e0[1] + 30));
-    if (!drawDecoSprite(g, 'deco_gate', gx, gy, 86, false)) drawGate(g, gx, gy - 26);
-    if (!drawDecoSprite(g, 'deco_fortress', fx, fy, 104, false)) drawFortress(g, fx, fy - 30);
+    const seenGate = new Set(), seenFort = new Set();
+    for (const pp of paths) {
+      const s0 = pp[0], e0 = pp[pp.length - 1];
+      const gx = Math.max(40, Math.min(W - 40, s0[0])), gy = Math.max(54, Math.min(H - 8, s0[1] + 26));
+      const fx = Math.max(50, Math.min(W - 50, e0[0])), fy = Math.max(64, Math.min(H - 8, e0[1] + 30));
+      const gk = (gx | 0) + ',' + (gy | 0), fk = (fx | 0) + ',' + (fy | 0);
+      if (!seenGate.has(gk)) { seenGate.add(gk); if (!drawDecoSprite(g, 'deco_gate', gx, gy, 86, false)) drawGate(g, gx, gy - 26); }
+      if (!seenFort.has(fk)) { seenFort.add(fk); if (!drawDecoSprite(g, 'deco_fortress', fx, fy, 104, false)) drawFortress(g, fx, fy - 30); }
+    }
 
     /* 6) 비네트 */
     const v = g.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 0.95);

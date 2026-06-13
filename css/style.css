@@ -23,6 +23,7 @@ body {
   width: min(96vw, 960px);
 }
 
+#stage { position: relative; }
 canvas#game {
   display: block;
   touch-action: manipulation;
@@ -489,19 +490,22 @@ canvas#game {
 
 /* ---------------- 선택 패널 (하단 중앙) ---------------- */
 #sel-panel {
-  position: absolute;
-  left: 50%; bottom: 12px;
-  transform: translateX(-50%);
-  min-width: 300px; max-width: 70%;
-  z-index: 6;
+  position: relative;
+  width: 100%;
+  margin-top: 8px;
+  min-height: 92px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   padding: 10px 14px 12px;
-  border-radius: 16px;
+  border-radius: 14px;
   background: linear-gradient(rgba(46,34,20,0.96), rgba(28,20,12,0.97));
   border: 2px solid #8a6d4a;
-  box-shadow: inset 0 0 0 1px rgba(255,224,130,0.25), 0 8px 24px rgba(0,0,0,0.6);
+  box-shadow: inset 0 0 0 1px rgba(255,224,130,0.25), 0 6px 16px rgba(0,0,0,0.55);
   text-align: center;
   font-family: 'Noto Sans KR', sans-serif;
 }
+.sp-empty { color: #9a8c70; font-size: 13px; }
 .sp-head { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 7px; }
 .sp-title { font-family: 'Noto Serif KR', serif; font-weight: 700; font-size: 16px; color: #ffe9a8; }
 .sp-star { color: #ffd75e; font-size: 13px; }
@@ -558,9 +562,9 @@ canvas#game {
 .small-btn.danger:hover { background: #5a2820; }
 
 @media (max-width: 720px) {
-  #sel-panel { min-width: 0; width: 94%; max-width: 94%; padding: 8px 8px 10px; bottom: 6px; }
+  #sel-panel { width: 100%; padding: 8px; min-height: 80px; }
   .sp-build { width: 64px; }
   .sp-bic, .sp-bic img { width: 32px; height: 32px; }
-  #btn-ult { bottom: 92px; }   /* 패널과 겹치지 않게 */
-  #ability-bar { bottom: 92px; }
+  #btn-ult { bottom: 10px; }
+  #ability-bar { bottom: 10px; }
 }
