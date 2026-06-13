@@ -740,12 +740,74 @@ const Sprites = (() => {
       strokePathOn(g, path, 44, th.path);
       strokePathOn(g, path, 28, shade(th.path.startsWith('#') ? th.path : '#c2a878', 12));
     }
+    // 길 가장자리를 울퉁불퉁하게: 풀이 잠식하고 흙이 번지는 불규칙 경계
+    {
+      const edgeGrass = grassPat || th.ground;
+      for (let i = 1; i < pathPts.length - 1; i++) {
+        const p = pathPts[i];
+        if (inWater(p.x, p.y)) continue;
+        const a = pathPts[i - 1], b = pathPts[i + 1];
+        const dx = b.x - a.x, dy = b.y - a.y, dl = Math.hypot(dx, dy) || 1;
+        const nx = -dy / dl, ny = dx / dl;     // 진행방향 수직
+        // 풀이 도로 안쪽으로 잠식 (경계를 물결치게)
+        if (i % 2 === 0 && rnd() < 0.6) {
+          const side = rnd() < 0.5 ? 1 : -1;
+          const off = 19 + rnd() * 5;
+          const ex = p.x + nx * off * side, ey = p.y + ny * off * side;
+          g.fillStyle = edgeGrass;
+          g.beginPath();
+          g.ellipse(ex, ey, 7 + rnd() * 8, 6 + rnd() * 6, Math.atan2(ny, nx), 0, Math.PI * 2);
+          g.fill();
+          g.strokeStyle = 'rgba(58,42,20,0.22)'; g.lineWidth = 1.5; g.stroke();
+        }
+        // 흙이 도로 밖으로 번짐
+        if (i % 2 === 1 && rnd() < 0.45) {
+          const side = rnd() < 0.5 ? 1 : -1;
+          const off = 22 + rnd() * 7;
+          const ex = p.x + nx * off * side, ey = p.y + ny * off * side;
+          g.fillStyle = `rgba(122,94,54,${0.32 + rnd() * 0.2})`;
+          g.beginPath();
+          g.ellipse(ex, ey, 5 + rnd() * 6, 4 + rnd() * 5, 0, 0, Math.PI * 2);
+          g.fill();
+        }
+      }
+      // 노면 얼룩/패임 (흙바닥 질감)
+      for (let i = 0; i < pathPts.length; i++) {
+        const p = pathPts[i];
+        if (inWater(p.x, p.y)) continue;
+        if (rnd() < 0.55) {
+          g.fillStyle = `rgba(42,30,12,${0.05 + rnd() * 0.1})`;
+          g.beginPath();
+          g.ellipse(p.x + (rnd() - 0.5) * 24, p.y + (rnd() - 0.5) * 24, 4 + rnd() * 7, 3 + rnd() * 5, rnd() * 3, 0, Math.PI * 2);
+          g.fill();
+        }
+      }
+    }
+
     // 다리 (강을 건너는 구간)
     if (map.bridge) drawBridge(g, map.bridge);
 
-    // 닳은 중앙 자국 + 수레바퀴 홈
+    // 닳은 중앙 자국 + 수레바퀴 홈 (살짝 굽이치게)
     strokePathOn(g, path, 13, 'rgba(255,238,190,0.10)');
     strokePathOn(g, path, 30, 'rgba(60,40,15,0.07)');
+    {
+      // 굽이치는 수레바퀴 홈 2줄
+      for (const sgn of [-1, 1]) {
+        g.strokeStyle = 'rgba(54,38,16,0.18)'; g.lineWidth = 2.5;
+        g.beginPath();
+        for (let i = 0; i < pathPts.length; i++) {
+          const p = pathPts[i];
+          if (inWater(p.x, p.y)) { g.stroke(); g.beginPath(); continue; }
+          const a = pathPts[Math.max(0, i - 1)], b = pathPts[Math.min(pathPts.length - 1, i + 1)];
+          const dl = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+          const nx = -(b.y - a.y) / dl, ny = (b.x - a.x) / dl;
+          const wob = Math.sin(i * 0.6) * 2;
+          const ox = nx * (sgn * 6 + wob), oy = ny * (sgn * 6 + wob);
+          if (i === 0) g.moveTo(p.x + ox, p.y + oy); else g.lineTo(p.x + ox, p.y + oy);
+        }
+        g.stroke();
+      }
+    }
     // 오르막/내리막 '구간': 림 안팎의 비탈 지대를 지나는 길 전체에
     // 명암 그라데이션 + 일정 간격 계단 밴드를 깐다
     if (map.hills && hillEdges.length) {
