@@ -1,20 +1,9 @@
 [
- { "name": "hero_liubei",        "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152611_2e3a2a0e-ec8a-46dd-b1c8-ff453cdfd45c.png", "maxW": 320, "quality": 0.92, "ext": "png" },
- { "name": "hero_guanyu",        "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152614_58f30cea-fe60-4593-8c80-99e255dfb215.png", "maxW": 320, "quality": 0.92, "ext": "png" },
- { "name": "hero_zhangfei",      "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152617_26c7539c-74d2-46ff-b75f-09bdbce08ed1.png", "maxW": 320, "quality": 0.92, "ext": "png" },
- { "name": "hero_zhaoyun",       "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152622_41ab9050-ce31-4e44-8e88-868c9ff9ef45.png", "maxW": 320, "quality": 0.92, "ext": "png" },
- { "name": "hero_zhugeliang",    "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152627_67c55d16-e719-4686-99a0-eac58be19328.png", "maxW": 320, "quality": 0.92, "ext": "png" },
- { "name": "deco_spot",          "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152630_20f9ba32-a867-4f3c-9644-4a5d7a81474e.png", "maxW": 200, "quality": 0.92, "ext": "png" },
- { "name": "unit_yellowturban",  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152632_b472aed6-a36f-470c-a19e-469c45db5011.png", "maxW": 256, "quality": 0.92, "ext": "png" },
- { "name": "unit_infantry",      "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152635_fa569a23-1b99-42a8-b41b-36da372968da.png", "maxW": 256, "quality": 0.92, "ext": "png" },
- { "name": "unit_archer",        "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152638_b3de7636-af6a-44b4-951b-f51022467a7b.png", "maxW": 256, "quality": 0.92, "ext": "png" },
- { "name": "unit_cavalry",       "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152641_0fab8827-e8fe-4f07-ac9a-efd3b806535b.png", "maxW": 256, "quality": 0.92, "ext": "png" },
- { "name": "unit_siege",         "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152643_9a611930-74de-4f97-bfcd-168a0a55a8c5.png", "maxW": 256, "quality": 0.92, "ext": "png" },
- { "name": "unit_soldier",       "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152646_18f03f7d-e44f-4239-87f3-8f342fe7f4e3.png", "maxW": 256, "quality": 0.92, "ext": "png" },
- { "name": "unit_general",       "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152649_b488994a-7153-43cf-9d1f-7e6111b168e7.png", "maxW": 280, "quality": 0.92, "ext": "png" },
- { "name": "hero_liubei_atk",    "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152652_e774751b-f9c5-4351-a581-d5afc6d3f81f.png", "maxW": 320, "quality": 0.92, "ext": "png" },
- { "name": "hero_guanyu_atk",    "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152910_1f7404c1-7d58-4056-b5af-d9772befe44e.png", "maxW": 320, "quality": 0.92, "ext": "png" },
- { "name": "hero_zhangfei_atk",  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152659_b1a360ab-f898-4405-950e-444f91305884.png", "maxW": 320, "quality": 0.92, "ext": "png" },
- { "name": "hero_zhaoyun_atk",   "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152701_6072030b-0960-4cd9-a5cd-f9f3e5cb3d8d.png", "maxW": 320, "quality": 0.92, "ext": "png" },
- { "name": "hero_zhugeliang_atk","url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_152704_64dae5fd-ced5-4214-aef9-e46c7c7e17f4.png", "maxW": 320, "quality": 0.92, "ext": "png" }
+ { "name": "unit_yellowturban_atk", "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_154528_312f89e7-a55c-40e4-b34d-7bbaca0125b5.png", "maxW": 256, "quality": 0.92, "ext": "png" },
+ { "name": "unit_infantry_atk",     "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_154532_62e29773-00f2-40ef-82b8-704da686bf30.png", "maxW": 256, "quality": 0.92, "ext": "png" },
+ { "name": "unit_archer_atk",       "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_154535_cf1393b3-354d-4cfa-b01a-8c2b376ee01d.png", "maxW": 256, "quality": 0.92, "ext": "png" },
+ { "name": "unit_cavalry_atk",      "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_154537_d2a87068-8217-4af2-9435-82354e097440.png", "maxW": 256, "quality": 0.92, "ext": "png" },
+ { "name": "unit_siege_atk",        "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_154541_76c80a49-cfb9-4dee-b4b2-e2f55c6f577d.png", "maxW": 256, "quality": 0.92, "ext": "png" },
+ { "name": "unit_soldier_atk",      "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_154543_b17c7b1c-d02d-48ea-80e4-c8a60f1c359e.png", "maxW": 256, "quality": 0.92, "ext": "png" },
+ { "name": "unit_general_atk",      "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3EBTA8Ap0b1rGrLefU50b5U6Eiw/hf_20260613_154546_ce0ff19d-a03c-4afc-b3a8-dcfa862f594c.png", "maxW": 280, "quality": 0.92, "ext": "png" }
 ]
