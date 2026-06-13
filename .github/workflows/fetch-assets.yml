@@ -1,0 +1,39 @@
+name: fetch-assets
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/chibi-manifest.json'
+      - '.github/workflows/fetch-assets.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download raw assets from manifest
+        run: |
+          mkdir -p assets/raw
+          python3 - <<'PY'
+          import json, subprocess, sys
+          items = json.load(open('tools/chibi-manifest.json'))
+          for it in items:
+              url = it['url']
+              if url == 'PENDING':
+                  print('SKIP (pending):', it['name']); continue
+              out = f"assets/raw/{it['name']}.png"
+              r = subprocess.run(['curl', '-sfL', url, '-o', out])
+              if r.returncode != 0:
+                  print('FAIL', it['name'], url, file=sys.stderr); sys.exit(1)
+              print('OK', it['name'])
+          PY
+      - name: Commit raw assets
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add assets/raw
+          git commit -m "chibi 원본 에셋 다운로드 (CI)" || echo "nothing to commit"
+          git push
