@@ -58,10 +58,10 @@ const CRIT_CHANCE = 0.15, CRIT_MULT = 1.9;
 
 /* ---------------- 전투 소모 보급기 (킹덤러쉬식) ---------------- */
 const ABILITIES = {
-  fire:  { name: '화계(火計)', icon: '🔥', cost: 60, cd: 18, radius: 95, dmg: 110, burn: 12,
-           desc: '지정 지점에 불벼락을 떨궈 광역 화염 피해' },
-  reinf: { name: '원군(援軍)', icon: '🛡️', cost: 70, cd: 22, count: 3, hp: 130, dmg: [8, 13], life: 14,
-           desc: '지정 지점에 임시 의용군 3명을 소환해 길을 막는다' },
+  fire:  { name: '화계(火計)', icon: '🔥', cd: 60, radius: 95, dmg: 110, burn: 12,
+           desc: '지정 지점에 불벼락을 떨궈 광역 화염 피해 (쿨타임 60초)' },
+  reinf: { name: '원군(援軍)', icon: '🛡️', cd: 120, count: 3, hp: 130, dmg: [8, 13], life: 14,
+           desc: '지정 지점에 임시 의용군 3명을 소환 (쿨타임 120초)' },
 };
 
 /* ---------------- 게임 상태 ---------------- */
@@ -98,7 +98,7 @@ function newGameState(stage) {
     comboT: 0,
     moraleT: 0,
     reinf: [],
-    abilities: { fire: { cd: 0 }, reinf: { cd: 0 } },
+    abilities: { fire: { cd: ABILITIES.fire.cd }, reinf: { cd: ABILITIES.reinf.cd } },
     aiming: null,
     aimX: W / 2, aimY: H / 2,
   };
@@ -128,12 +128,14 @@ function pointAt(path, d) {
 function makeEnemy(typeId) {
   const base = ENEMY_TYPES[typeId] || BOSS_TYPES[typeId];
   const isBoss = !!BOSS_TYPES[typeId];
-  // 난이도 보정: 일반 적은 스테이지 비례 강화, 보스는 일괄 강화
-  const hpScale = isBoss ? 1.25 : 1.08 + G.stage.id * 0.07;
+  // 난이도 보정: 일반 적은 스테이지 비례, 보스는 에너지 3배·공격력 1.4배
+  const hpScale = isBoss ? 2.6 : 1.08 + G.stage.id * 0.07;
+  const hp = Math.round(base.hp * hpScale);
+  const dmg = isBoss ? [base.dmg[0] * 1.4, base.dmg[1] * 1.4] : base.dmg;
   return {
     typeId, ...base,
-    isBoss,
-    hp: Math.round(base.hp * hpScale), maxHp: Math.round(base.hp * hpScale),
+    isBoss, dmg,
+    hp, maxHp: hp,
     progress: 0,
     x: G.stage.path[0][0], y: G.stage.path[0][1],
     slow: 0, stun: 0, burn: 0, burnTime: 0, flash: 0,
@@ -205,13 +207,17 @@ function spawnHero(heroId) {
   const start = pointAt(G.stage.path, pathLength(G.stage.path) * 0.65);
   const xp = save.heroXp[heroId] || 0;
   const level = heroLevel(xp);
-  const mul = heroStatMul(level);
+  let mul = heroStatMul(level);
+  // 이 전장의 인연(특수 영웅): 능력 강화
+  const special = G.stage.specialHero === heroId;
+  const hpBuff = special ? 1.3 : 1, dmgBuff = special ? 1.25 : 1;
   G.hero = {
     kind: 'hero', def,
-    level, xp,
-    maxHp: Math.round(def.hp * mul), hp: Math.round(def.hp * mul),
-    dmgScaled: [def.dmg[0] * mul, def.dmg[1] * mul],
-    ultMul: 1 + (level - 1) * 0.06,
+    level, xp, special,
+    maxHp: Math.round(def.hp * mul * hpBuff), hp: Math.round(def.hp * mul * hpBuff),
+    dmgScaled: [def.dmg[0] * mul * dmgBuff, def.dmg[1] * mul * dmgBuff],
+    ultMul: (1 + (level - 1) * 0.06) * (special ? 1.2 : 1),
+    ultCdMul: special ? 0.75 : 1,
     x: start.x, y: start.y - 40, tx: start.x, ty: start.y - 40,
     target: null, atkCd: 0,
     ultCd: 0, dead: false, respawnT: 0,
@@ -337,6 +343,7 @@ function update(dt) {
   updateHero(dt);
   updateProjectiles(dt);
   updateAbilityBar();
+  refreshSelPanel();
 
   // 파티클
   for (const p of G.parts) {
@@ -513,8 +520,7 @@ function updateReinforcements(dt) {
 /* ---------------- 보급기 발동 ---------------- */
 function resolveAbility(key, x, y) {
   const a = ABILITIES[key], st = G.abilities[key];
-  if (G.gold < a.cost || st.cd > 0) return false;
-  G.gold -= a.cost;
+  if (st.cd > 0) return false;
   st.cd = a.cd;
   if (key === 'fire') {
     addEffect('fireRain', x, y, 1.0, { radius: a.radius });
@@ -632,6 +638,13 @@ function updateHero(dt) {
   }
   h.hp = Math.min(h.maxHp, h.hp + h.def.regen * dt);
 
+  // 인접한 적이 있으면 멈춰서 교전 (근접 영웅)
+  if (!h.def.ranged) {
+    for (const e of G.enemies) {
+      if (e.dead || (e.blocker && e.blocker !== h)) continue;
+      if (dist(h, e) < 34) { h.tx = h.x; h.ty = h.y; break; }
+    }
+  }
   // 이동 명령 우선
   const dMove = Math.hypot(h.tx - h.x, h.ty - h.y);
   if (dMove > 6) {
@@ -670,7 +683,7 @@ function castUlt() {
   const h = G.hero;
   if (!h || h.dead || h.ultCd > 0) return;
   const u = h.def.ult;
-  h.ultCd = u.cd;
+  h.ultCd = u.cd * (h.ultCdMul || 1);
   h.attackT = 0.55;
   addFloater(h.x, h.y - 30, u.name + '!!', '#ffd700', 20);
   G.shake = 0.35;
@@ -865,6 +878,26 @@ function shadow(x, y, w) {
   ctx.fill();
 }
 
+/* 바닥에 깔리는 타원형 링 (원근감 있는 선택/표식 마커) */
+function drawGroundRing(cx, cy, rx, ry, color, alpha = 1) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  const grad = ctx.createRadialGradient(0, 0, rx * 0.5, 0, 0, rx);
+  grad.addColorStop(0, 'rgba(255,255,255,0)');
+  grad.addColorStop(0.8, 'rgba(255,255,255,0)');
+  grad.addColorStop(1, color);
+  ctx.globalAlpha = alpha * 0.5;
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = alpha;
+  ctx.lineWidth = 3; ctx.strokeStyle = color;
+  ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.globalAlpha = alpha * 0.7;
+  ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+  ctx.beginPath(); ctx.ellipse(0, -1, rx, ry, 0, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+  ctx.restore();
+}
+
 function drawSprite(img, x, y, targetH, face = 1) {
   const s = targetH / img.height;
   const w = img.width * s, h = img.height * s;
@@ -933,16 +966,10 @@ function drawSpots() {
   for (let i = 0; i < G.towers.length; i++) {
     const t = G.towers[i];
     if (t.type) continue;
-    // 건설 가능 표시: 맥동 링으로 주목도 강화
-    ctx.beginPath(); ctx.arc(t.x, t.y + 2, 26 + pulse * 4, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(255,224,130,${0.28 + pulse * 0.3})`; ctx.lineWidth = 2.5; ctx.stroke();
-    if (G.selected === i) {
-      ctx.beginPath(); ctx.arc(t.x, t.y + 2, 30, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,230,140,0.35)'; ctx.fill();
-      ctx.strokeStyle = 'rgba(255,220,110,0.95)'; ctx.lineWidth = 2.5; ctx.stroke();
-    }
-    shadow(t.x, t.y + 11, 18);
-    drawSprite(img, t.x, t.y + 16, 48);
+    // 건설 가능 표시: 바닥 타원 링 (맥동/선택)
+    drawGroundRing(t.x, t.y + 15, 31, 13, '#ffe082', G.selected === i ? 1 : 0.45 + pulse * 0.3);
+    shadow(t.x, t.y + 13, 16);
+    drawSprite(img, t.x, t.y + 17, 50);
   }
 }
 
@@ -1013,8 +1040,8 @@ function drawUnits() {
       const face = (e.blocker && !e.blocker.dead) ? (e.blocker.x >= e.x ? 1 : -1) : (ahead.x >= e.x - 0.3 ? 1 : -1);
       const map = e.isBoss ? ['unit_general', BOSS_ILLUST_HUE[e.typeId]] : UNIT_ILLUST[e.typeId];
       const uImg = map ? SpriteImages.variant(map[0], map[1]) : null;
-      const hgt = uImg ? (e.isBoss ? 66 : 42) : (e.isBoss ? 50 : 34);
-      shadow(e.x, e.y + 10, e.isBoss ? 19 : 13);
+      const hgt = uImg ? (e.isBoss ? 82 : 52) : (e.isBoss ? 62 : 42);
+      shadow(e.x, e.y + 11, e.isBoss ? 23 : 16);
       if (e.shielded) {
         ctx.beginPath(); ctx.arc(e.x, e.y - 10, 26, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(120,180,255,0.28)'; ctx.fill();
@@ -1049,23 +1076,20 @@ function drawUnits() {
         roundRect(e.x - nw / 2, e.y - hgt - 16, nw, 14, 4); ctx.stroke();
         ctx.fillStyle = '#ffd9a0';
         ctx.fillText(e.name, e.x, e.y - hgt - 5);
-        drawHpBar(e.x, e.y - hgt + 1, 58, e.hp / e.maxHp, '#e67e22');
+        drawHpBar(e.x, e.y - hgt + 1, 66, e.hp / e.maxHp, '#e67e22');
       } else {
-        drawHpBar(e.x, e.y - hgt + 1, 32, e.hp / e.maxHp);
+        drawHpBar(e.x, e.y - hgt + 1, 38, e.hp / e.maxHp);
       }
     } else if (it.kind === 'soldier') {
       const s = u;
       const face = s.target && !s.target.dead ? (s.target.x >= s.x ? 1 : -1) : 1;
-      shadow(s.x, s.y + 9, 11);
+      shadow(s.x, s.y + 10, 13);
       const filter = s.temp ? 'saturate(1.5) brightness(1.18)' : null;
       const sImg = SpriteImages.variant('unit_soldier', filter);
-      if (s.temp) {
-        ctx.beginPath(); ctx.arc(s.x, s.y + 7, 15, 0, Math.PI * 2 * clamp(s.life / ABILITIES.reinf.life, 0, 1));
-        ctx.strokeStyle = 'rgba(123,237,159,0.8)'; ctx.lineWidth = 2; ctx.stroke();
-      }
-      if (sImg) drawIllust(sImg, s.x, s.y + 9, 36, face, Math.sin(G.time * 6 + s.homeOff) * 0.04);
-      else drawSprite(Sprites.unit('soldier', Math.floor(G.time * 4 + s.homeOff) % 2), s.x, s.y + 9, 31, face);
-      drawHpBar(s.x, s.y - 28, 26, s.hp / s.maxHp, s.temp ? '#7bed9f' : '#4aa4e0');
+      if (s.temp) drawGroundRing(s.x, s.y + 10, 16, 7, '#7bed9f', clamp(s.life / ABILITIES.reinf.life, 0.25, 1));
+      if (sImg) drawIllust(sImg, s.x, s.y + 10, 44, face, Math.sin(G.time * 6 + s.homeOff) * 0.04);
+      else drawSprite(Sprites.unit('soldier', Math.floor(G.time * 4 + s.homeOff) % 2), s.x, s.y + 10, 38, face);
+      drawHpBar(s.x, s.y - 34, 30, s.hp / s.maxHp, s.temp ? '#7bed9f' : '#4aa4e0');
     } else {
       const hh = u;
       if (hh.dead) {
@@ -1081,11 +1105,9 @@ function drawUnits() {
       const face = attacking && hh.attackFace ? hh.attackFace
         : hh.target && !hh.target.dead ? (hh.target.x >= hh.x ? 1 : -1)
         : (Math.abs(hh.tx - hh.x) > 2 ? (hh.tx >= hh.x ? 1 : -1) : 1);
-      // 선택/오라
-      ctx.beginPath(); ctx.arc(hh.x, hh.y + 7, 18, 0, Math.PI * 2);
-      ctx.strokeStyle = hh.def.color; ctx.lineWidth = 2.5;
-      ctx.globalAlpha = 0.85; ctx.stroke(); ctx.globalAlpha = 1;
-      shadow(hh.x, hh.y + 9, 14);
+      // 오라: 바닥 타원 링
+      drawGroundRing(hh.x, hh.y + 12, 25, 10, hh.def.color, (G.sel && G.sel.ref === hh) ? 1 : 0.8);
+      shadow(hh.x, hh.y + 12, 16);
       const moving = Math.hypot(hh.tx - hh.x, hh.ty - hh.y) > 6 || (hh.target && !hh.target.dead);
       const baseImg = SpriteImages.variant('hero_' + hh.def.id, null);
       const atkImg = attacking ? SpriteImages.variant('hero_' + hh.def.id + '_atk', null) : null;
@@ -1093,22 +1115,23 @@ function drawUnits() {
       if (hImg) {
         if (attacking) {
           const k = clamp(1 - hh.attackT / HERO_ATK_DUR, 0, 1);
-          const lunge = Math.sin(k * Math.PI) * 11;
+          const lunge = Math.sin(k * Math.PI) * 12;
           const tilt = Math.sin(k * Math.PI) * 0.11;
-          drawIllust(hImg, hh.x + lunge * face, hh.y + 10, 50, face, tilt);
+          drawIllust(hImg, hh.x + lunge * face, hh.y + 12, 60, face, tilt);
         } else {
           const sway = moving ? Math.sin(G.time * 9) * 0.06 : Math.sin(G.time * 2.2) * 0.018;
-          drawIllust(hImg, hh.x, hh.y + 10, 48, face, sway);
+          drawIllust(hImg, hh.x, hh.y + 12, 58, face, sway);
         }
       } else {
-        drawSprite(Sprites.unit(hh.def.id, moving ? Math.floor(G.time * 5) % 2 : 0), hh.x, hh.y + 10, 40, face);
+        drawSprite(Sprites.unit(hh.def.id, moving ? Math.floor(G.time * 5) % 2 : 0), hh.x, hh.y + 12, 48, face);
       }
       ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
       ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 3;
-      ctx.strokeText(`${hh.def.name} Lv.${hh.level}`, hh.x, hh.y - 42);
-      ctx.fillStyle = '#fff';
-      ctx.fillText(`${hh.def.name} Lv.${hh.level}`, hh.x, hh.y - 42);
-      drawHpBar(hh.x, hh.y - 38, 40, hh.hp / hh.maxHp, '#3a9ae8');
+      const hname = (hh.special ? '⭐ ' : '') + `${hh.def.name} Lv.${hh.level}`;
+      ctx.strokeText(hname, hh.x, hh.y - 52);
+      ctx.fillStyle = hh.special ? '#ffe27a' : '#fff';
+      ctx.fillText(hname, hh.x, hh.y - 52);
+      drawHpBar(hh.x, hh.y - 48, 46, hh.hp / hh.maxHp, '#3a9ae8');
       if (Math.hypot(hh.tx - hh.x, hh.ty - hh.y) > 8) {
         ctx.beginPath(); ctx.arc(hh.tx, hh.ty, 6, 0, Math.PI * 2);
         ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
@@ -1411,87 +1434,160 @@ function updateAbilityBar() {
     const a = ABILITIES[key], st = G.abilities[key];
     const el = $('#abil-' + key);
     if (!el) continue;
-    const ready = st.cd <= 0 && G.gold >= a.cost;
+    const ready = st.cd <= 0;
     el.classList.toggle('ready', ready);
     el.classList.toggle('aiming', G.aiming === key);
     el.classList.toggle('disabled', !ready);
-    el.querySelector('.ab-cd').textContent = st.cd > 0 ? Math.ceil(st.cd) + 's' : `💰${a.cost}`;
+    el.querySelector('.ab-cd').textContent = ready ? '준비' : Math.ceil(st.cd) + 's';
   }
 }
 
-/* ---------------- 건설 메뉴 ---------------- */
-function openBuildMenu(idx) {
-  G.selected = idx;
-  const t = G.towers[idx];
-  const menu = $('#build-menu');
-  menu.innerHTML = '';
-  menu.style.display = 'block';
+/* ============================================================
+   선택 패널 (하단 중앙) — 유닛/타워 스펙 + 건설/업그레이드/판매
+   ============================================================ */
+function towerStatHtml(t) {
+  const def = TOWER_TYPES[t.type], lv = def.levels[t.level];
+  const chips = [];
+  if (t.type === 'barracks') {
+    chips.push(`🛡 병력 ${lv.soldierHp}`, `⚔ ${lv.soldierDmg[0]}~${lv.soldierDmg[1]}`, `↔ ${lv.range}`);
+  } else {
+    chips.push(`⚔ ${lv.dmg[0]}~${lv.dmg[1]}`, `↔ ${lv.range}`, `⏱ ${(1 / lv.rate).toFixed(1)}/s`);
+    if (lv.splash) chips.push(`💥 ${lv.splash}`);
+    if (lv.burn) chips.push(`🔥 ${lv.burn}`);
+  }
+  return chips.map(c => `<span class="sp-chip">${c}</span>`).join('');
+}
 
-  if (!t.type) {
-    menu.innerHTML = '<div class="bm-title">건설</div>';
+function selectAt(kind, i, ref) {
+  G.sel = { kind, i, ref };
+  G.selected = (kind === 'tower' || kind === 'spot') ? i : null;
+  renderSelPanel();
+}
+function selectClear() {
+  G.sel = null; G.selected = null; G.selUI = null;
+  $('#sel-panel').style.display = 'none';
+}
+
+function renderSelPanel() {
+  const panel = $('#sel-panel');
+  const sel = G.sel;
+  if (!sel) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  panel.innerHTML = '';
+  G.selUI = { costBtns: [], hpEl: null, ref: sel.ref, kind: sel.kind, i: sel.i };
+
+  if (sel.kind === 'spot') {
+    const t = G.towers[sel.i];
+    const head = document.createElement('div'); head.className = 'sp-head';
+    head.innerHTML = `<span class="sp-title">진지 구축</span>`;
+    panel.appendChild(head);
+    const row = document.createElement('div'); row.className = 'sp-build-row';
     for (const key of Object.keys(TOWER_TYPES)) {
-      const def = TOWER_TYPES[key];
-      const cost = def.levels[0].cost;
+      const def = TOWER_TYPES[key], cost = def.levels[0].cost;
       const btn = document.createElement('button');
-      btn.className = 'bm-btn' + (G.gold < cost ? ' disabled' : '');
-      btn.innerHTML = `<span class="bm-icon"><img src="assets/img/icon_${key}.jpg" alt="" onerror="this.outerHTML='${def.icon}'"></span><span class="bm-name">${def.name}</span><span class="bm-cost">💰${cost}</span>`;
+      btn.className = 'sp-build';
+      btn.innerHTML = `<span class="sp-bic"><img src="assets/img/icon_${key}.jpg" alt="" onerror="this.outerHTML='${def.icon}'"></span><span class="sp-bnm">${def.name}</span><span class="sp-bc">💰${cost}</span>`;
       btn.title = def.desc;
-      btn.onclick = () => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
         if (G.gold < cost) return;
         G.gold -= cost;
         t.type = key; t.level = 0; t.cooldown = 0;
         if (key === 'barracks') { t.rally = nearestPathPoint(t.x, t.y); t.soldiers = []; }
-        closeBuildMenu();
+        AudioSys.play('build');
         updateHUD();
+        selectAt('tower', sel.i, t);
       };
-      menu.appendChild(btn);
+      G.selUI.costBtns.push({ el: btn, cost });
+      row.appendChild(btn);
     }
-  } else {
-    const def = TOWER_TYPES[t.type];
-    menu.innerHTML = `<div class="bm-title">${def.levels[t.level].name} ★${t.level + 1}</div>`;
-    if (t.type === 'barracks') menu.innerHTML += `<div class="bm-hint">사거리 안을 클릭해 집결지 이동 🚩</div>`;
+    panel.appendChild(row);
+
+  } else if (sel.kind === 'tower') {
+    const t = G.towers[sel.i], def = TOWER_TYPES[t.type];
+    const head = document.createElement('div'); head.className = 'sp-head';
+    head.innerHTML = `<span class="sp-title">${def.levels[t.level].name} <span class="sp-star">${'★'.repeat(t.level + 1)}</span></span>` +
+      (t.type === 'barracks' ? `<span class="sp-hint">사거리 안을 클릭 → 집결지 이동 🚩</span>` : '');
+    panel.appendChild(head);
+    const stats = document.createElement('div'); stats.className = 'sp-stats';
+    stats.innerHTML = towerStatHtml(t);
+    panel.appendChild(stats);
+    const acts = document.createElement('div'); acts.className = 'sp-acts';
     if (t.level < def.levels.length - 1) {
       const next = def.levels[t.level + 1];
-      const btn = document.createElement('button');
-      btn.className = 'bm-btn' + (G.gold < next.cost ? ' disabled' : '');
-      btn.innerHTML = `<span class="bm-icon">⬆️</span><span class="bm-name">${next.name}</span><span class="bm-cost">💰${next.cost}</span>`;
-      btn.onclick = () => {
+      const up = document.createElement('button');
+      up.className = 'sp-act up';
+      up.innerHTML = `⬆ ${next.name} <b>💰${next.cost}</b>`;
+      up.onclick = (e) => {
+        e.stopPropagation();
         if (G.gold < next.cost) return;
-        G.gold -= next.cost;
-        t.level++;
+        G.gold -= next.cost; t.level++;
         if (t.type === 'barracks') for (const s of t.soldiers) if (!s.dead) { s.maxHp = next.soldierHp; s.hp = next.soldierHp; s.dmg = next.soldierDmg; }
-        closeBuildMenu(); updateHUD();
+        AudioSys.play('build'); updateHUD();
+        selectAt('tower', sel.i, t);
       };
-      menu.appendChild(btn);
+      G.selUI.costBtns.push({ el: up, cost: next.cost });
+      acts.appendChild(up);
     }
-    // 판매
-    let spent = 0;
-    for (let l = 0; l <= t.level; l++) spent += def.levels[l].cost;
+    let spent = 0; for (let l = 0; l <= t.level; l++) spent += def.levels[l].cost;
     const refund = Math.floor(spent * 0.6);
     const sell = document.createElement('button');
-    sell.className = 'bm-btn sell';
-    sell.innerHTML = `<span class="bm-icon">🗑️</span><span class="bm-name">판매</span><span class="bm-cost">+💰${refund}</span>`;
-    sell.onclick = () => {
+    sell.className = 'sp-act sell';
+    sell.innerHTML = `🗑 판매 <b>+💰${refund}</b>`;
+    sell.onclick = (e) => {
+      e.stopPropagation();
       G.gold += refund;
-      for (const e of G.enemies) if (e.blocker && e.blocker.tower === t) e.blocker = null;
+      for (const en of G.enemies) if (en.blocker && en.blocker.tower === t) en.blocker = null;
       t.type = null; t.level = 0; t.soldiers = [];
-      closeBuildMenu(); updateHUD();
+      AudioSys.play('sell'); updateHUD();
+      selectClear();
     };
-    menu.appendChild(sell);
+    acts.appendChild(sell);
+    panel.appendChild(acts);
+
+  } else {
+    // 유닛/영웅 스펙
+    const u = sel.ref;
+    const head = document.createElement('div'); head.className = 'sp-head';
+    let title, sub = '';
+    if (sel.kind === 'enemy') { title = u.name + (u.isBoss ? ` <span class="sp-boss">${BOSS_TYPES[u.typeId].title}</span>` : ''); }
+    else if (sel.kind === 'hero') { title = `${u.def.name} <span class="sp-star">Lv.${u.level}</span>`; if (u.special) sub = `<span class="sp-special">⭐ 이 전장의 인연 (능력 강화)</span>`; }
+    else { title = u.temp ? '의용군(원군)' : '창병'; }
+    head.innerHTML = `<span class="sp-title">${title}</span>${sub}`;
+    panel.appendChild(head);
+    const stats = document.createElement('div'); stats.className = 'sp-stats';
+    const chips = [];
+    const hp = `<span class="sp-chip" id="sp-hp">❤ ${Math.max(0, Math.round(u.hp))}/${Math.round(u.maxHp)}</span>`;
+    chips.push(hp);
+    if (sel.kind === 'enemy') {
+      chips.push(`⚔ ${Math.round(u.dmg[0])}~${Math.round(u.dmg[1])}`, `👟 ${u.speed}`, `🛡 ${Math.round((u.armor || 0) * 100)}%`);
+    } else if (sel.kind === 'hero') {
+      chips.push(`⚔ ${Math.round(u.dmgScaled[0])}~${Math.round(u.dmgScaled[1])}`, `✦ ${u.def.ult.name}`);
+    } else {
+      chips.push(`⚔ ${u.dmg[0]}~${u.dmg[1]}`);
+    }
+    stats.innerHTML = chips.join('');
+    panel.appendChild(stats);
+    G.selUI.hpEl = $('#sp-hp');
   }
-  // 메뉴 위치
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = rect.width / W, scaleY = rect.height / H;
-  menu.style.left = clamp(t.x * scaleX + rect.left - menu.offsetWidth / 2, 8, window.innerWidth - menu.offsetWidth - 8) + 'px';
-  menu.style.top = clamp(t.y * scaleY + rect.top - menu.offsetHeight - 30, 8, window.innerHeight - 60) + 'px';
 }
-function closeBuildMenu() {
-  if (G) G.selected = null;
-  $('#build-menu').style.display = 'none';
+
+// 매 프레임: 금액에 따른 버튼 활성화 + 유닛 HP/사망 갱신
+function refreshSelPanel() {
+  if (!G) return;
+  const sel = G.sel, ui = G.selUI;
+  if (!sel || !ui) return;
+  if (sel.kind === 'spot' && G.towers[sel.i].type) { selectAt('tower', sel.i, G.towers[sel.i]); return; }
+  if (sel.kind === 'tower' && !G.towers[sel.i].type) { selectClear(); return; }
+  if ((sel.kind === 'enemy' || sel.kind === 'soldier') && (sel.ref.dead || sel.ref.hp <= 0)) { selectClear(); return; }
+  for (const b of ui.costBtns) b.el.classList.toggle('poor', G.gold < b.cost);
+  if (ui.hpEl) {
+    const u = sel.ref;
+    ui.hpEl.textContent = `❤ ${Math.max(0, Math.round(u.hp))}/${Math.round(u.maxHp)}`;
+  }
 }
 
 /* ---------------- 캔버스 입력 ---------------- */
-let heroSelected = false;
 canvas.addEventListener('click', (ev) => {
   if (!G || G.over) return;
   const rect = canvas.getBoundingClientRect();
@@ -1516,47 +1612,44 @@ canvas.addEventListener('click', (ev) => {
     }
   }
 
-  // 영웅 클릭 → 선택
-  const h = G.hero;
-  if (h && !h.dead && Math.hypot(h.x - x, h.y - y) < HIT_R) {
-    heroSelected = !heroSelected;
-    closeBuildMenu();
-    addFloater(h.x, h.y - 30, heroSelected ? '이동 지점을 클릭' : '대기', '#fff', 13);
-    return;
-  }
-  // 영웅 이동 명령
-  if (heroSelected && h && !h.dead) {
-    h.tx = clamp(x, 16, W - 16); h.ty = clamp(y, 16, H - 16);
-    heroSelected = false;
-    return;
-  }
-
-  // 건설부지 / 타워 클릭 (빈 부지는 더 넓은 판정으로 누르기 쉽게)
+  // 1) 건설부지 / 타워 (빈 부지는 넓은 판정)
   for (let i = 0; i < G.towers.length; i++) {
     const t = G.towers[i];
     const r = t.type ? HIT_R : HIT_R + 14;
-    if (Math.hypot(t.x - x, t.y - y) < r) {
-      openBuildMenu(i);
-      return;
-    }
+    if (Math.hypot(t.x - x, t.y - y) < r) { selectAt(t.type ? 'tower' : 'spot', i, t); return; }
   }
+  // 2) 영웅 클릭 → 스펙
+  const h = G.hero;
+  if (h && !h.dead && Math.hypot(h.x - x, h.y - y) < HIT_R + 4) { selectAt('hero', -1, h); return; }
+  // 3) 적군 클릭 → 스펙 (가장 가까운)
+  let be = null, bd = HIT_R + 6;
+  for (const e of G.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - x, e.y - y); if (d < bd) { bd = d; be = e; } }
+  if (be) { selectAt('enemy', -1, be); return; }
+  // 4) 아군 병사/원군 클릭 → 스펙
+  let ba = null, bad = HIT_R + 2;
+  const allies = [];
+  for (const t of G.towers) for (const s of t.soldiers) if (!s.dead) allies.push(s);
+  for (const rr of G.reinf) if (!rr.dead) allies.push(rr);
+  for (const s of allies) { const d = Math.hypot(s.x - x, s.y - y); if (d < bad) { bad = d; ba = s; } }
+  if (ba) { selectAt('soldier', -1, ba); return; }
 
-  // 막사 선택 중이면 사거리 안 클릭으로 창병 집결지 이동
-  if (G.selected != null) {
-    const sel = G.towers[G.selected];
-    if (sel && sel.type === 'barracks') {
-      const range = TOWER_TYPES.barracks.levels[sel.level].range;
-      if (Math.hypot(sel.x - x, sel.y - y) <= range + 36) {
-        setRally(sel, x, y);
-        addFloater(sel.rally.x, sel.rally.y - 16, '집결지 이동', '#7bed9f', 13);
-        return;   // 선택 유지
+  // 5) 빈 곳: 막사 선택 중이면 집결지 이동, 아니면 영웅 이동
+  if (G.sel && G.sel.kind === 'tower') {
+    const t = G.towers[G.sel.i];
+    if (t && t.type === 'barracks') {
+      const range = TOWER_TYPES.barracks.levels[t.level].range;
+      if (Math.hypot(t.x - x, t.y - y) <= range + 36) {
+        setRally(t, x, y);
+        addFloater(t.rally.x, t.rally.y - 16, '집결지 이동', '#7bed9f', 13);
+        return;
       }
     }
   }
-  closeBuildMenu();
+  if (h && !h.dead) { h.tx = clamp(x, 16, W - 16); h.ty = clamp(y, 16, H - 16); }
+  selectClear();
 });
 
-canvas.addEventListener('mousemove', (ev) => {
+canvas.addEventListener("mousemove", (ev) => {
   if (!G || !G.aiming) return;
   const rect = canvas.getBoundingClientRect();
   G.aimX = (ev.clientX - rect.left) * W / rect.width;
@@ -1569,15 +1662,14 @@ canvas.addEventListener('contextmenu', (ev) => {
 /* ---------------- 보급기 버튼 ---------------- */
 function toggleAiming(key) {
   if (!G || G.over) return;
-  const a = ABILITIES[key], st = G.abilities[key];
-  if (st.cd > 0 || G.gold < a.cost) { addFloater(W / 2, 70, st.cd > 0 ? '재사용 대기 중' : '골드 부족', '#ff8a6a', 15); return; }
+  const st = G.abilities[key];
+  if (st.cd > 0) { addFloater(W / 2, 70, '재사용 대기 중 ' + Math.ceil(st.cd) + 's', '#ff8a6a', 15); return; }
   G.aiming = G.aiming === key ? null : key;
-  closeBuildMenu();
 }
 for (const key of Object.keys(ABILITIES)) {
   const el = $('#abil-' + key);
   if (el) {
-    el.title = `${ABILITIES[key].name} — ${ABILITIES[key].desc} (💰${ABILITIES[key].cost})`;
+    el.title = `${ABILITIES[key].name} — ${ABILITIES[key].desc}`;
     el.querySelector('.ab-ic').textContent = ABILITIES[key].icon;
     el.onclick = (e) => { e.stopPropagation(); toggleAiming(key); };
   }
@@ -1622,15 +1714,17 @@ function showHeroSelect(stage) {
   for (const id of Object.keys(HEROES)) {
     const hd = HEROES[id];
     const locked = hd.unlockStage > save.cleared + 1 || hd.unlockStage > stage.id;
+    const special = stage.specialHero === id;
     const card = document.createElement('div');
-    card.className = 'hero-card' + (locked ? ' locked' : '');
+    card.className = 'hero-card' + (locked ? ' locked' : '') + (special ? ' special' : '');
     const lv = heroLevel(save.heroXp[id] || 0);
     card.innerHTML = `
+      ${special ? '<div class="hc-bond">⭐ 이 전장의 인연</div>' : ''}
       <div class="hc-icon" style="border-color:${hd.color}">${locked ? '<span class="pt-fb">🔒</span>' : portraitHtml(id, hd.icon)}</div>
       <div class="hc-name">${hd.name} <span class="hc-lv">Lv.${lv}</span></div>
       <div class="hc-title">${hd.title}</div>
       <div class="hc-ult">${hd.ult.icon} ${hd.ult.name}</div>
-      <div class="hc-desc">${locked ? `스테이지 ${hd.unlockStage + 1} 클리어 후 해금` : hd.ult.desc}</div>`;
+      <div class="hc-desc">${locked ? `스테이지 ${hd.unlockStage + 1} 클리어 후 해금` : (special ? '능력 강화: 체력·공격력·필살기 ↑, 쿨타임 ↓' : hd.ult.desc)}</div>`;
     if (!locked) card.onclick = () => startStage(stage, id);
     wrap.appendChild(card);
   }
@@ -1645,8 +1739,7 @@ function startStage(stage, heroId) {
   showOverlay(null);
   screen = 'game';
   $('#hud').style.display = 'flex';
-  closeBuildMenu();
-  heroSelected = false;
+  selectClear();
   G.speed = 1;
   $('#btn-speed').textContent = '▶ x1';
   AudioSys.startBgm();
@@ -1673,10 +1766,10 @@ function showStageMap() {
   screen = 'map';
   AudioSys.stopBgm();
   G = null;
-  $('#hud').style.display = 'none';
-  $('#ability-bar').style.display = 'none';
-  $('#btn-ult').style.display = 'none';
-  closeBuildMenu();
+  $("#hud").style.display = "none";
+  $("#ability-bar").style.display = "none";
+  $("#btn-ult").style.display = "none";
+  $("#sel-panel").style.display = "none";
   const wrap = $('#stage-list');
   wrap.innerHTML = '';
   for (const st of STAGES) {
@@ -1742,6 +1835,12 @@ $('#btn-result-next').onclick = () => {
 };
 $('#btn-result-map').onclick = () => showStageMap();
 $('#btn-hero-back').onclick = () => showStageMap();
+$('#btn-reset').onclick = () => {
+  if (!confirm('모든 진행 상황(클리어·별·영웅 성장)을 삭제하고 처음부터 시작합니다. 계속할까요?')) return;
+  localStorage.removeItem(SAVE_KEY);
+  save = loadSave();
+  showStageMap();
+};
 
 window.addEventListener('keydown', (e) => {
   if (!G || screen !== 'game') return;
@@ -1749,7 +1848,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === '1') toggleAiming('fire');
   if (e.key === '2') toggleAiming('reinf');
   if (e.key === 'm' || e.key === 'M') $('#btn-sound').onclick();
-  if (e.key === 'Escape') { G.aiming = null; closeBuildMenu(); }
+  if (e.key === 'Escape') { G.aiming = null; selectClear(); }
 });
 
 /* ---------------- 메인 루프 ---------------- */
