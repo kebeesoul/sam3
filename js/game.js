@@ -87,23 +87,45 @@ function placeSpots(paths, map) {
     for (const s of samples) { const d = (s.x - x) * (s.x - x) + (s.y - y) * (s.y - y); if (d < m) m = d; }
     return Math.sqrt(m);
   };
-  const NEAR = 52, FAR = 116, SPACING = 80, MAXN = 11;
+  const minTo = (arr, x, y) => {
+    let m = 1e9;
+    for (const s of arr) { const d = Math.hypot(s.x - x, s.y - y); if (d < m) m = d; }
+    return m;
+  };
+  const NEAR = 50, FAR = 120, MAXN = 8;
   const cands = [];
-  for (let y = 80; y <= 540; y += 22) {
-    for (let x = 48; x <= 912; x += 22) {
+  for (let y = 76; y <= 544; y += 18) {
+    for (let x = 44; x <= 916; x += 18) {
       if (inWater(x, y)) continue;
       const dp = minToPath(x, y);
       if (dp < NEAR || dp > FAR) continue;
       cands.push({ x, y, dp });
     }
   }
-  cands.sort((a, b) => a.dp - b.dp);  // 길에 가까운(방어 유효) 자리 우선
   const chosen = [];
-  for (const c of cands) {
-    if (chosen.every(s => Math.hypot(s.x - c.x, s.y - c.y) >= SPACING)) {
-      chosen.push(c);
-      if (chosen.length >= MAXN) break;
+  // 1) 본진(성채=경로 끝점) 근처에 최소 2개 확보 → 마지막 방어선 전략 가능
+  const forts = [];
+  for (const p of paths) {
+    const e = p[p.length - 1];
+    if (!forts.some(f => Math.hypot(f[0] - e[0], f[1] - e[1]) < 40)) forts.push(e);
+  }
+  for (const f of forts) {
+    const near = cands.filter(c => { const d = Math.hypot(c.x - f[0], c.y - f[1]); return d > 30 && d < 175; });
+    near.sort((a, b) => Math.hypot(a.x - f[0], a.y - f[1]) - Math.hypot(b.x - f[0], b.y - f[1]));
+    let added = 0;
+    for (const c of near) {
+      if (chosen.every(s => Math.hypot(s.x - c.x, s.y - c.y) >= 56)) { chosen.push(c); if (++added >= 2) break; }
     }
+  }
+  // 2) 나머지는 '가장 먼 점 샘플링'으로 넓게 흩뿌린다
+  while (chosen.length < MAXN) {
+    let best = null, bestd = -1;
+    for (const c of cands) {
+      const d = chosen.length ? minTo(chosen, c.x, c.y) : c.dp;
+      if (d > bestd) { bestd = d; best = c; }
+    }
+    if (!best || (chosen.length >= forts.length * 2 && bestd < 95)) break; // 충분히 흩어졌으면 중단
+    chosen.push(best);
   }
   return chosen.map(c => [Math.round(c.x), Math.round(c.y)]);
 }
@@ -168,7 +190,7 @@ function pointAt(path, d) {
 
 /* ---------------- 적 생성 ---------------- */
 // 난이도 글로벌 배수 (전반적 상향)
-const ENEMY_HP_MUL = 1.1, ENEMY_DMG_MUL = 1.25, BOSS_HP_MUL = 1.65, BOSS_DMG_MUL = 1.2, TOWER_DMG_MUL = 0.9;
+const ENEMY_HP_MUL = 1.1, ENEMY_DMG_MUL = 1.25, BOSS_HP_MUL = 1.65, BOSS_DMG_MUL = 1.2, TOWER_DMG_MUL = 1.32;
 function makeEnemy(typeId, pathId = 0) {
   const base = ENEMY_TYPES[typeId] || BOSS_TYPES[typeId];
   const isBoss = !!BOSS_TYPES[typeId];
