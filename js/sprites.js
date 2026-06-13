@@ -1001,7 +1001,7 @@ const Sprites = (() => {
       const fx = Math.max(50, Math.min(W - 50, e0[0])), fy = Math.max(64, Math.min(H - 8, e0[1] + 30));
       const gk = (gx | 0) + ',' + (gy | 0), fk = (fx | 0) + ',' + (fy | 0);
       if (!seenGate.has(gk)) { seenGate.add(gk); if (!drawDecoSprite(g, 'deco_gate', gx, gy, 86, false)) drawGate(g, gx, gy - 26); }
-      if (!seenFort.has(fk)) { seenFort.add(fk); if (!drawDecoSprite(g, 'deco_fortress', fx, fy, 104, false)) drawFortress(g, fx, fy - 30); }
+      if (!seenFort.has(fk)) { seenFort.add(fk); if (!drawDecoSprite(g, 'deco_fortress', fx, fy, 128, false)) drawFortress(g, fx, fy - 30); }
     }
 
     /* 6) 비네트 */
