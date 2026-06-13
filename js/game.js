@@ -165,6 +165,7 @@ function newGameState(stage) {
     lives: stage.lives,
     waveIdx: -1,            // 아직 시작 전
     waveTimer: WAVE_GAP,    // 다음 웨이브까지 남은 시간 (최대 10초)
+    preCalled: false,       // 전투 중 다음 공세를 미리 소집했는가 (웨이브당 1회)
     spawnQueue: [],
     enemies: [],
     towers: spots.map((s, i) => ({ spotIdx: i, x: s[0], y: s[1], type: null, level: 0, cooldown: 0, soldiers: [] })),
@@ -218,6 +219,7 @@ function pointAt(path, d) {
 // 난이도 글로벌 배수 (전반적 상향)
 const ENEMY_HP_MUL = 1.1, ENEMY_DMG_MUL = 1.25, BOSS_HP_MUL = 1.65, BOSS_DMG_MUL = 1.2, TOWER_DMG_MUL = 1.32;
 const HERO_HP_MUL = 0.45; // 영웅 체력(에너지) 하향 — 종전 대비 절반 이하
+const HERO_ULT_MUL = 0.8;  // 영웅 필살기 위력 20% 하향
 // 본진 성채: 자체 원거리 활 공격 + 업그레이드(공격력·사거리·하트 증가)
 const FORT_LEVELS = [
   { name: '본진 성채', range: 132, dmg: [16, 24], rate: 1.1, cost: 0 },
@@ -239,13 +241,17 @@ function makeEnemy(typeId, pathId = 0) {
   const base = ENEMY_TYPES[typeId] || BOSS_TYPES[typeId];
   const isBoss = !!BOSS_TYPES[typeId];
   const path = G.paths[pathId] || G.paths[0];
-  const hpScale = isBoss ? BOSS_HP_MUL : (1.08 + G.stage.id * 0.07) * ENEMY_HP_MUL;
+  // 스테이지가 높을수록 적 체력·공격력 상향 (약 20% → 40%)
+  const stageBuff = 1.2 + 0.2 * (G.stage.id / 9);
+  const hpScale = (isBoss ? BOSS_HP_MUL : (1.08 + G.stage.id * 0.07) * ENEMY_HP_MUL) * stageBuff;
   const hp = Math.round(base.hp * hpScale);
-  const dm = isBoss ? BOSS_DMG_MUL : ENEMY_DMG_MUL;
+  const dm = (isBoss ? BOSS_DMG_MUL : ENEMY_DMG_MUL) * stageBuff;
   const dmg = [base.dmg[0] * dm, base.dmg[1] * dm];
+  // 적 영웅(보스)은 이동속도를 1/5 수준으로 (교전 시에도 느리게 전진)
+  const spd = isBoss ? base.speed * 0.2 : base.speed;
   return {
     typeId, ...base,
-    isBoss, dmg, pathId, path,
+    isBoss, dmg, pathId, path, speed: spd,
     hp, maxHp: hp,
     progress: 0,
     x: path[0][0], y: path[0][1],
@@ -440,8 +446,9 @@ function update(dt) {
   if (G.comboT > 0) { G.comboT -= dt; if (G.comboT <= 0) G.combo = 0; }
   for (const k in G.abilities) if (G.abilities[k].cd > 0) G.abilities[k].cd -= dt;
 
-  // 웨이브 진행
+  // 웨이브 진행 (필드가 비면 다음 공세 자동 진행)
   if (G.waveIdx < 0 || (G.spawnQueue.length === 0 && G.enemies.length === 0)) {
+    G.preCalled = false; // 현재 공세가 끝났으니 다시 미리 소집 가능
     if (G.waveIdx >= G.stage.waves.length - 1 && G.waveIdx >= 0) {
       winStage(); return;
     }
@@ -889,7 +896,7 @@ function castUlt(aimX, aimY) {
   addFloater(h.x, h.y - 30, u.name + '!!', '#ffd700', 20);
   G.shake = 0.35;
   AudioSys.play('ult');
-  const ultDmg = u.dmg * h.ultMul;
+  const ultDmg = u.dmg * h.ultMul * HERO_ULT_MUL;
   switch (u.type) {
     case 'aoe':
       addEffect('ring', h.x, h.y, 0.5, { radius: u.radius, color: h.def.color });
@@ -1669,26 +1676,37 @@ function drawFloaters() {
 }
 
 function drawWaveBanner() {
-  if ((G.waveIdx < 0 || (G.spawnQueue.length === 0 && G.enemies.length === 0)) && !G.over && G.waveIdx < G.stage.waves.length - 1) {
-    const bw = 320, bx = W / 2 - bw / 2, by = 12;
-    // 나무 현판
-    const grad = ctx.createLinearGradient(0, by, 0, by + 40);
-    grad.addColorStop(0, '#6a4a2c'); grad.addColorStop(0.5, '#54381e'); grad.addColorStop(1, '#3e2814');
-    ctx.fillStyle = grad;
-    roundRect(bx, by, bw, 40, 8); ctx.fill();
-    ctx.strokeStyle = '#2a1a0c'; ctx.lineWidth = 2;
-    roundRect(bx, by, bw, 40, 8); ctx.stroke();
-    ctx.strokeStyle = 'rgba(232,200,58,0.5)'; ctx.lineWidth = 1;
-    roundRect(bx + 3, by + 3, bw - 6, 34, 6); ctx.stroke();
-    // 시간 게이지
+  if (G.over) return;
+  const moreWaves = G.waveIdx < G.stage.waves.length - 1;
+  if (!moreWaves) return;
+  const fieldClear = (G.waveIdx < 0) || (G.spawnQueue.length === 0 && G.enemies.length === 0);
+  if (!fieldClear && G.preCalled) return; // 전투 중이고 이미 미리 소집했으면 숨김
+  const bw = 340, bx = W / 2 - bw / 2, by = 12;
+  // 나무 현판
+  const grad = ctx.createLinearGradient(0, by, 0, by + 40);
+  grad.addColorStop(0, '#6a4a2c'); grad.addColorStop(0.5, '#54381e'); grad.addColorStop(1, '#3e2814');
+  ctx.fillStyle = grad;
+  roundRect(bx, by, bw, 40, 8); ctx.fill();
+  ctx.strokeStyle = '#2a1a0c'; ctx.lineWidth = 2;
+  roundRect(bx, by, bw, 40, 8); ctx.stroke();
+  ctx.strokeStyle = 'rgba(232,200,58,0.5)'; ctx.lineWidth = 1;
+  roundRect(bx + 3, by + 3, bw - 6, 34, 6); ctx.stroke();
+  ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffe9a8';
+  if (fieldClear) {
     const ratio = clamp(G.waveTimer / WAVE_GAP, 0, 1);
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     roundRect(bx + 14, by + 27, bw - 28, 6, 3); ctx.fill();
     ctx.fillStyle = '#e8a83a';
     roundRect(bx + 14, by + 27, (bw - 28) * ratio, 6, 3); ctx.fill();
-    ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center';
     ctx.fillStyle = '#ffe9a8';
     ctx.fillText(`⚔ 다음 공세까지 ${Math.ceil(G.waveTimer)}초 — 클릭하여 즉시 출전 (+금)`, W / 2, by + 19);
+  } else {
+    // 전투 중 미리 소집 안내 (펄스)
+    const pulse = 0.6 + 0.4 * Math.sin(G.time * 4);
+    ctx.globalAlpha = pulse;
+    ctx.fillText(`⚔ 다음 공세 미리 소집 — 클릭 (+금 20%↑)`, W / 2, by + 24);
+    ctx.globalAlpha = 1;
   }
 }
 
@@ -1842,6 +1860,7 @@ function renderSelPanel() {
     sell.innerHTML = `🗑 판매 <b>+💰${refund}</b>`;
     sell.onclick = (e) => {
       e.stopPropagation();
+      if (!confirm(`정말 판매하시겠습니까? (+💰${refund} 환급)`)) return;
       G.gold += refund;
       for (const en of G.enemies) if (en.blocker && en.blocker.tower === t) en.blocker = null;
       t.type = null; t.level = 0; t.soldiers = [];
@@ -1935,11 +1954,20 @@ canvas.addEventListener('click', (ev) => {
     return;
   }
 
-  // 웨이브 조기 시작 배너
-  if ((G.waveIdx < 0 || (G.spawnQueue.length === 0 && G.enemies.length === 0)) && G.waveIdx < G.stage.waves.length - 1) {
-    if (x > W / 2 - 150 && x < W / 2 + 150 && y > 14 && y < 48) {
-      const bonus = Math.floor(G.waveTimer * 2);
-      if (bonus > 0) { G.gold += bonus; addFloater(W / 2, 70, `조기 출전 보너스 +${bonus}`, '#ffd700', 15); }
+  // 웨이브 소집 배너 — 대기 중 즉시출전, 또는 전투 중 '미리 소집'(웨이브당 1회, +20% 금)
+  {
+    const moreWaves = G.waveIdx < G.stage.waves.length - 1;
+    const fieldClear = (G.waveIdx < 0) || (G.spawnQueue.length === 0 && G.enemies.length === 0);
+    const canSummon = moreWaves && (fieldClear || !G.preCalled);
+    if (canSummon && x > W / 2 - 150 && x < W / 2 + 150 && y > 14 && y < 48) {
+      let bonus;
+      if (fieldClear) {
+        bonus = Math.floor(G.waveTimer * 2);
+      } else {
+        bonus = Math.round(WAVE_GAP * 2 * 1.2); // 적이 남아있을 때 미리 소집: 10초 대기 호출보다 20% 더
+        G.preCalled = true;
+      }
+      if (bonus > 0) { G.gold += bonus; addFloater(W / 2, 70, `조기 소집 보너스 +${bonus}`, '#ffd700', 15); }
       G.earlyCalls++;
       startNextWave();
       return;
