@@ -991,6 +991,7 @@ const SpriteImages = (() => {
     'unit_yellowturban', 'unit_infantry', 'unit_archer', 'unit_cavalry',
     'unit_siege', 'unit_soldier', 'unit_general',
     'hero_liubei', 'hero_guanyu', 'hero_zhangfei', 'hero_zhaoyun', 'hero_zhugeliang',
+    'hero_liubei_atk', 'hero_guanyu_atk', 'hero_zhangfei_atk', 'hero_zhaoyun_atk', 'hero_zhugeliang_atk',
     'deco_pine', 'deco_tree', 'deco_bamboo', 'deco_rock', 'deco_hut',
     'deco_mountain', 'deco_bush', 'deco_gate', 'deco_fortress', 'deco_ship',
     'deco_range_snow', 'deco_range_rock', 'deco_grove', 'deco_peak2',
