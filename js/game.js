@@ -70,8 +70,10 @@ let screen = 'title';  // title | map | dialogue | game
 let lastTime = 0;
 
 function newGameState(stage) {
+  const paths = stage.paths || [stage.path];
   return {
     stage,
+    paths,
     gold: stage.gold,
     lives: stage.lives,
     waveIdx: -1,            // 아직 시작 전
@@ -125,21 +127,24 @@ function pointAt(path, d) {
 }
 
 /* ---------------- 적 생성 ---------------- */
-function makeEnemy(typeId) {
+// 난이도 글로벌 배수 (전반적 상향)
+const ENEMY_HP_MUL = 1.15, ENEMY_DMG_MUL = 1.3, BOSS_HP_MUL = 1.8, BOSS_DMG_MUL = 1.25, TOWER_DMG_MUL = 0.9;
+function makeEnemy(typeId, pathId = 0) {
   const base = ENEMY_TYPES[typeId] || BOSS_TYPES[typeId];
   const isBoss = !!BOSS_TYPES[typeId];
-  // 난이도 보정: 일반 적은 스테이지 비례, 보스는 에너지 3배·공격력 1.4배
-  const hpScale = isBoss ? 2.6 : 1.08 + G.stage.id * 0.07;
+  const path = G.paths[pathId] || G.paths[0];
+  const hpScale = isBoss ? BOSS_HP_MUL : (1.08 + G.stage.id * 0.07) * ENEMY_HP_MUL;
   const hp = Math.round(base.hp * hpScale);
-  const dmg = isBoss ? [base.dmg[0] * 1.4, base.dmg[1] * 1.4] : base.dmg;
+  const dm = isBoss ? BOSS_DMG_MUL : ENEMY_DMG_MUL;
+  const dmg = [base.dmg[0] * dm, base.dmg[1] * dm];
   return {
     typeId, ...base,
-    isBoss, dmg,
+    isBoss, dmg, pathId, path,
     hp, maxHp: hp,
     progress: 0,
-    x: G.stage.path[0][0], y: G.stage.path[0][1],
+    x: path[0][0], y: path[0][1],
     slow: 0, stun: 0, burn: 0, burnTime: 0, flash: 0,
-    blocker: null,         // 자신을 막고 있는 아군 유닛
+    blocker: null,
     atkCd: 0,
     skillCd: isBoss ? 6 : 0,
     rage: 1,
@@ -150,34 +155,40 @@ function makeEnemy(typeId) {
 
 function queueWave(waveIdx) {
   const wave = G.stage.waves[waveIdx];
-  for (const [type, count, interval, delay] of wave) {
+  const np = G.paths.length;
+  for (const [type, count, interval, delay, pathId] of wave) {
     for (let i = 0; i < count; i++) {
-      G.spawnQueue.push({ type, at: G.time + delay + i * interval });
+      // 경로가 여럿이면 그룹을 입구에 라운드로빈 분산 (보스는 0번 경로)
+      const pid = pathId != null ? pathId : (BOSS_TYPES[type] ? 0 : (np > 1 ? i % np : 0));
+      G.spawnQueue.push({ type, at: G.time + delay + i * interval, pathId: pid });
     }
   }
   G.spawnQueue.sort((a, b) => a.at - b.at);
 }
 
 /* ---------------- 아군 보병 / 영웅 ---------------- */
-function makeSoldier(tower, lv, idx) {
-  const rp = tower.rally || { x: nearestPathPoint(tower.x, tower.y).x, y: nearestPathPoint(tower.x, tower.y).y };
-  const ang = idx * Math.PI;
+function makeSoldier(tower, lv, idx, count) {
+  const rp = tower.rally || nearestPathPoint(tower.x, tower.y);
+  const n = count || lv.count || 2;
+  const ang = n <= 1 ? 0 : idx * (Math.PI * 2 / n) + Math.PI / 2;
+  const rad = n >= 3 ? 18 : 14;
   return {
-    kind: 'soldier', tower,
+    kind: 'soldier', tower, idx,
     hp: lv.soldierHp, maxHp: lv.soldierHp, dmg: lv.soldierDmg,
-    x: rp.x + Math.cos(ang) * 14, y: rp.y + Math.sin(ang) * 14,
-    homeOff: ang,
+    x: rp.x + Math.cos(ang) * rad, y: rp.y + Math.sin(ang) * rad,
+    homeOff: ang, anchorRad: rad,
     target: null, atkCd: 0, dead: false, respawnT: 0,
   };
 }
 function nearestPathPoint(x, y) {
-  const path = G.stage.path;
   let best = null, bestD = Infinity;
-  const total = pathLength(path);
-  for (let d = 0; d <= total; d += 10) {
-    const p = pointAt(path, d);
-    const dd = Math.hypot(p.x - x, p.y - y);
-    if (dd < bestD) { bestD = dd; best = { ...p, d }; }
+  for (const path of G.paths) {
+    const total = pathLength(path);
+    for (let d = 0; d <= total; d += 10) {
+      const p = pointAt(path, d);
+      const dd = Math.hypot(p.x - x, p.y - y);
+      if (dd < bestD) { bestD = dd; best = { x: p.x, y: p.y, d }; }
+    }
   }
   return best;
 }
@@ -185,13 +196,15 @@ function nearestPathPoint(x, y) {
 /* 막사 사거리 안에서 창병 집결지를 옮긴다 (경로 위로 스냅) */
 function setRally(t, x, y) {
   const range = TOWER_TYPES.barracks.levels[t.level].range;
-  const path = G.stage.path, total = pathLength(path);
   let best = null, bestD = Infinity;
-  for (let d = 0; d <= total; d += 8) {
-    const p = pointAt(path, d);
-    if (Math.hypot(p.x - t.x, p.y - t.y) > range) continue;  // 사거리 밖 경로는 제외
-    const dd = Math.hypot(p.x - x, p.y - y);
-    if (dd < bestD) { bestD = dd; best = { x: p.x, y: p.y, d }; }
+  for (const path of G.paths) {
+    const total = pathLength(path);
+    for (let d = 0; d <= total; d += 8) {
+      const p = pointAt(path, d);
+      if (Math.hypot(p.x - t.x, p.y - t.y) > range) continue;
+      const dd = Math.hypot(p.x - x, p.y - y);
+      if (dd < bestD) { bestD = dd; best = { x: p.x, y: p.y, d }; }
+    }
   }
   if (!best) {
     // 사거리 안에 경로가 없으면 클릭 지점을 사거리로 클램프
@@ -204,7 +217,7 @@ function setRally(t, x, y) {
 
 function spawnHero(heroId) {
   const def = HEROES[heroId];
-  const start = pointAt(G.stage.path, pathLength(G.stage.path) * 0.65);
+  const start = pointAt(G.paths[0], pathLength(G.paths[0]) * 0.65);
   const xp = save.heroXp[heroId] || 0;
   const level = heroLevel(xp);
   let mul = heroStatMul(level);
@@ -334,7 +347,7 @@ function update(dt) {
   // 스폰
   while (G.spawnQueue.length && G.spawnQueue[0].at <= G.time) {
     const s = G.spawnQueue.shift();
-    G.enemies.push(makeEnemy(s.type));
+    G.enemies.push(makeEnemy(s.type, s.pathId));
   }
 
   updateEnemies(dt);
@@ -391,7 +404,6 @@ function maybeEvent() {
 }
 
 function updateEnemies(dt) {
-  const totalLen = pathLength(G.stage.path);
   for (const e of G.enemies) {
     if (e.dead) continue;
     e.wobble += dt * 6;
@@ -425,10 +437,10 @@ function updateEnemies(dt) {
     const slowMul = e.slow > 0 ? 0.5 : 1;
     if (e.slow > 0) e.slow -= dt;
     e.progress += e.speed * slowMul * dt;
-    const p = pointAt(G.stage.path, e.progress);
+    const p = pointAt(e.path, e.progress);
     e.x = p.x; e.y = p.y;
 
-    if (e.progress >= totalLen) {
+    if (e.progress >= pathLength(e.path)) {
       e.escaped = true; e.dead = true;
       G.lives -= e.livesCost;
       addFloater(e.x, e.y, `-${e.livesCost} ❤️`, '#ff5555', 16);
@@ -461,7 +473,7 @@ function updateBossSkill(e, dt) {
     case 'zhangHe': case 'caoChun': e.progress += 60; addEffect('dash', e.x, e.y, 0.4); break;
     case 'xiahouDun': e.rage = 1.6; break;
     case 'caiMao': { // 수군 소환
-      for (let i = 0; i < 2; i++) { const n = makeEnemy('navy'); n.progress = Math.max(0, e.progress - 30 - i * 25); G.enemies.push(n); }
+      for (let i = 0; i < 2; i++) { const n = makeEnemy('navy', e.pathId); n.progress = Math.max(0, e.progress - 30 - i * 25); G.enemies.push(n); }
       break; }
     case 'zhangRen': { // 저격
       const targets = allAllies(); if (targets.length) { const t = targets[Math.floor(Math.random() * targets.length)]; t.hp -= 90; addEffect('bolt', t.x, t.y, 0.3); if (t.hp <= 0) killAlly(t); }
@@ -497,8 +509,8 @@ function makeReinf(x, y, idx) {
   return {
     kind: 'soldier', temp: true,
     hp: a.hp, maxHp: a.hp, dmg: a.dmg,
-    x: x + Math.cos(ang) * 16, y: y + Math.sin(ang) * 16,
-    homeOff: ang, rally: { x, y },
+    x: x + Math.cos(ang) * 18, y: y + Math.sin(ang) * 18,
+    homeOff: ang, anchorRad: 18, rally: { x, y },
     target: null, atkCd: 0, dead: false, life: a.life,
   };
 }
@@ -512,7 +524,7 @@ function updateReinforcements(dt) {
       addEffect('poof', u.x, u.y, 0.4);
       continue;
     }
-    combatUnit(u, u.rally, 72, 62, dt);
+    combatUnit(u, u.rally, 130, 78, dt);
   }
   G.reinf = G.reinf.filter(u => !u.dead);
 }
@@ -564,15 +576,14 @@ function updateTowers(dt) {
 }
 
 function updateBarracks(t, lv, dt) {
-  // 보충
-  if (t.soldiers.length < 2) {
-    for (let i = t.soldiers.length; i < 2; i++) t.soldiers.push(makeSoldier(t, lv, i));
-  }
+  const cnt = lv.count || 2;
+  // 보충 (업그레이드로 인원이 늘면 자동 충원)
+  while (t.soldiers.length < cnt) t.soldiers.push(makeSoldier(t, lv, t.soldiers.length, cnt));
   for (const s of t.soldiers) {
     if (s.dead) {
       s.respawnT -= dt;
       if (s.respawnT <= 0) {
-        Object.assign(s, makeSoldier(t, lv, s.homeOff > 1 ? 1 : 0));
+        Object.assign(s, makeSoldier(t, lv, s.idx != null ? s.idx : 0, cnt));
       }
       continue;
     }
@@ -589,7 +600,7 @@ function combatUnit(u, rally, engageRange, moveSpeed, dt, tower) {
     for (const e of G.enemies) {
       if (e.dead || e.noFight && false) continue;
       if ((e.blocker && e.blocker !== u) || e.stun > 0) continue;
-      const anchor = { x: rally.x + Math.cos(u.homeOff || 0) * 14, y: rally.y + Math.sin(u.homeOff || 0) * 14 };
+      const anchor = { x: rally.x + Math.cos(u.homeOff || 0) * (u.anchorRad || 14), y: rally.y + Math.sin(u.homeOff || 0) * (u.anchorRad || 14) };
       if (dist(anchor, e) <= engageRange && (!e.blocker || e.blocker === u)) {
         u.target = e; e.blocker = u; break;
       }
@@ -619,7 +630,7 @@ function combatUnit(u, rally, engageRange, moveSpeed, dt, tower) {
     }
   } else {
     // 집결지로 복귀
-    const hx = rally.x + Math.cos(u.homeOff || 0) * 14, hy = rally.y + Math.sin(u.homeOff || 0) * 14;
+    const hx = rally.x + Math.cos(u.homeOff || 0) * (u.anchorRad || 14), hy = rally.y + Math.sin(u.homeOff || 0) * (u.anchorRad || 14);
     const d = Math.hypot(hx - u.x, hy - u.y);
     if (d > 4) { u.x += (hx - u.x) / d * moveSpeed * dt; u.y += (hy - u.y) / d * moveSpeed * dt; }
   }
@@ -743,9 +754,9 @@ function updateProjectiles(dt) {
         addEffect('boom', tgt.x, tgt.y, 0.35, { radius: lv.splash });
         spawnParts(tgt.x, tgt.y, 12, { color: ['#8a7a5a', '#6a5a44', '#f0a050'], size: 3.5, speed: 110, up: 70, life: 0.6 });
         AudioSys.play('boom', 150);
-        for (const e of G.enemies) if (!e.dead && dist(tgt, e) <= lv.splash) dealDamage(e, rollDmg(lv.dmg), { magic: lv.magic, canCrit: true });
+        for (const e of G.enemies) if (!e.dead && dist(tgt, e) <= lv.splash) dealDamage(e, rollDmg(lv.dmg) * TOWER_DMG_MUL, { magic: lv.magic, canCrit: true });
       } else {
-        dealDamage(tgt, rollDmg(lv.dmg), { magic: lv.magic, burn: lv.burn, canCrit: true });
+        dealDamage(tgt, rollDmg(lv.dmg) * TOWER_DMG_MUL, { magic: lv.magic, burn: lv.burn, canCrit: true });
         if (lv.proj === 'fire') addEffect('flame', tgt.x, tgt.y, 0.25);
       }
     } else {
@@ -762,7 +773,7 @@ function winStage() {
   G.over = true; G.won = true;
   AudioSys.stopBgm();
   AudioSys.play('win');
-  const stars = G.lives >= 18 ? 3 : G.lives >= 10 ? 2 : 1;
+  const stars = G.lives >= 3 ? 3 : G.lives >= 2 ? 2 : 1;
   const sid = G.stage.id;
   save.cleared = Math.max(save.cleared, sid);
   save.stars[sid] = Math.max(save.stars[sid] || 0, stars);
@@ -807,8 +818,10 @@ function pathSamples() {
   if (pathSampleStage !== G.stage.id) {
     pathSampleStage = G.stage.id;
     pathSampleCache = [];
-    const total = pathLength(G.stage.path);
-    for (let d = 0; d <= total; d += 16) pathSampleCache.push(pointAt(G.stage.path, d));
+    for (const path of G.paths) {
+      const total = pathLength(path);
+      for (let d = 0; d <= total; d += 16) pathSampleCache.push(pointAt(path, d));
+    }
   }
   return pathSampleCache;
 }
@@ -1036,7 +1049,7 @@ function drawUnits() {
     if (it.kind === 'enemy') {
       const e = u;
       const frame = Math.floor(e.wobble * 1.6) % 2;
-      const ahead = pointAt(G.stage.path, e.progress + 6);
+      const ahead = pointAt(e.path, e.progress + 6);
       const face = (e.blocker && !e.blocker.dead) ? (e.blocker.x >= e.x ? 1 : -1) : (ahead.x >= e.x - 0.3 ? 1 : -1);
       const map = e.isBoss ? ['unit_general', BOSS_ILLUST_HUE[e.typeId]] : UNIT_ILLUST[e.typeId];
       const uImg = map ? SpriteImages.variant(map[0], map[1]) : null;
@@ -1464,15 +1477,19 @@ function selectAt(kind, i, ref) {
   renderSelPanel();
 }
 function selectClear() {
-  G.sel = null; G.selected = null; G.selUI = null;
-  $('#sel-panel').style.display = 'none';
+  if (G) { G.sel = null; G.selected = null; G.selUI = null; }
+  renderSelPanel();
 }
 
 function renderSelPanel() {
   const panel = $('#sel-panel');
-  const sel = G.sel;
-  if (!sel) { panel.style.display = 'none'; return; }
-  panel.style.display = 'block';
+  const sel = G && G.sel;
+  panel.style.display = 'flex';
+  if (!sel) {
+    panel.innerHTML = '<div class="sp-empty">유닛·타워를 눌러 정보를 보거나, 빈 곳을 눌러 영웅을 이동하세요</div>';
+    if (G) G.selUI = null;
+    return;
+  }
   panel.innerHTML = '';
   G.selUI = { costBtns: [], hpEl: null, ref: sel.ref, kind: sel.kind, i: sel.i };
 
@@ -1734,6 +1751,7 @@ function showHeroSelect(stage) {
 /* ---------------- 스테이지 시작 / 맵 ---------------- */
 function startStage(stage, heroId) {
   G = newGameState(stage);
+  G.heroId = heroId;
   Sprites.invalidate(); pathSampleStage = -1;
   spawnHero(heroId);
   showOverlay(null);
@@ -1827,6 +1845,7 @@ $('#btn-pause').onclick = () => {
   $('#btn-pause').textContent = G.paused ? '▶ 재개' : '⏸ 정지';
 };
 $('#btn-quit').onclick = () => { if (confirm('전투를 포기하고 지도로 돌아갑니까?')) showStageMap(); };
+$('#btn-restart').onclick = () => { if (G && confirm('이 전투를 처음부터 다시 시작합니까?')) startStage(G.stage, G.heroId); };
 $('#btn-result-retry').onclick = () => showDialogue(STAGES[G.stage.id].intro, () => showHeroSelect(STAGES[G.stage.id]));
 $('#btn-result-next').onclick = () => {
   const next = STAGES[G.stage.id + 1];
