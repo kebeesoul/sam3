@@ -168,6 +168,7 @@ function newGameState(stage) {
     spawnQueue: [],
     enemies: [],
     towers: spots.map((s, i) => ({ spotIdx: i, x: s[0], y: s[1], type: null, level: 0, cooldown: 0, soldiers: [] })),
+    forts: fortPositions(paths).map(f => ({ x: f.x, y: f.y, level: 0, cooldown: 0 })),
     projectiles: [],
     effects: [],
     floaters: [],
@@ -217,6 +218,23 @@ function pointAt(path, d) {
 // 난이도 글로벌 배수 (전반적 상향)
 const ENEMY_HP_MUL = 1.1, ENEMY_DMG_MUL = 1.25, BOSS_HP_MUL = 1.65, BOSS_DMG_MUL = 1.2, TOWER_DMG_MUL = 1.32;
 const HERO_HP_MUL = 0.45; // 영웅 체력(에너지) 하향 — 종전 대비 절반 이하
+// 본진 성채: 자체 원거리 활 공격 + 업그레이드(공격력·사거리·하트 증가)
+const FORT_LEVELS = [
+  { name: '본진 성채', range: 132, dmg: [16, 24], rate: 1.1, cost: 0 },
+  { name: '강화 성채', range: 160, dmg: [26, 38], rate: 0.95, cost: 200 },
+  { name: '철벽 성채', range: 190, dmg: [40, 56], rate: 0.8,  cost: 380 },
+];
+function fortPositions(paths) {
+  const out = [];
+  for (const p of paths) {
+    const e = p[p.length - 1];
+    const fx = Math.max(50, Math.min(W - 50, e[0])), fy = Math.max(64, Math.min(H - 8, e[1] + 30));
+    const cx = fx, cy = fy - 40;
+    if (out.some(f => Math.hypot(f.x - cx, f.y - cy) < 50)) continue;
+    out.push({ x: cx, y: cy });
+  }
+  return out;
+}
 function makeEnemy(typeId, pathId = 0) {
   const base = ENEMY_TYPES[typeId] || BOSS_TYPES[typeId];
   const isBoss = !!BOSS_TYPES[typeId];
@@ -440,8 +458,13 @@ function update(dt) {
 
   updateEnemies(dt);
   updateTowers(dt);
+  updateFort(dt);
   updateReinforcements(dt);
   updateHero(dt);
+  // 상태이상: 독 (적 영웅 특수기술) — 아군 지속 피해
+  for (const a of allAllies()) {
+    if (a.poison > 0) { a.poison -= dt; a.hp -= 7 * dt; if (a.hp <= 0) killAlly(a); }
+  }
   updateProjectiles(dt);
   updateAbilityBar();
   refreshSelPanel();
@@ -491,6 +514,24 @@ function maybeEvent() {
   }
 }
 
+// 교전 중에도 전진을 멈추지 않는 적: 보스(적 영웅)·공성차·원거리 유닛(카이팅)
+function keepsAdvancing(e) { return e.isBoss || e.typeId === 'siege' || e.ranged; }
+
+// 원거리 적의 실제 원거리 공격: 사거리 내 가장 가까운 아군을 향해 투사체 발사
+function enemyRangedAttack(e, dt) {
+  e.shootCd = (e.shootCd == null ? rand(0, 1.2) : e.shootCd) - dt;
+  if (e.shootCd > 0) return;
+  let best = null, bd = e.range || 90;
+  for (const a of allAllies()) { const d = dist(e, a); if (d <= bd) { bd = d; best = a; } }
+  if (!best) { e.shootCd = 0.25; return; }
+  e.shootCd = 1.5;
+  e.attackT = ENEMY_ATK_DUR;
+  e.attackFace = best.x >= e.x ? 1 : -1;
+  G.projectiles.push({ enemyShot: true, magic: !!e.magic, x: e.x, y: e.y - 12, target: best,
+    speed: 360, dmg: rollDmg(e.dmg) * (e.rage || 1) });
+  AudioSys.play(e.magic ? 'ult' : 'arrow', 55);
+}
+
 function updateEnemies(dt) {
   for (const e of G.enemies) {
     if (e.dead) continue;
@@ -520,16 +561,19 @@ function updateEnemies(dt) {
         addEffect('slash', e.blocker.x, e.blocker.y, 0.2, { ang: rand(-1.2, 1.2) });
         if (e.blocker.hp <= 0) killAlly(e.blocker);
       }
-      // 일반 적은 멈춰서 교전, 적군 영웅(보스)은 느려지되 전진을 멈추지 않음
-      if (!e.isBoss) continue;
+      // 일반 적은 멈춰서 교전, 적군 영웅(보스)·공성차는 느려지되 전진을 멈추지 않음
+      if (!keepsAdvancing(e)) continue;
     } else {
       e.blocker = null;
     }
 
+    // 원거리 적은 사거리 내 아군을 향해 실제 원거리 공격
+    if (e.ranged) enemyRangedAttack(e, dt);
+
     // 이동
     let slowMul = e.slow > 0 ? 0.5 : 1;
     if (e.slow > 0) e.slow -= dt;
-    if (e.isBoss && e.blocker && !e.blocker.dead) slowMul = Math.min(slowMul, 0.5); // 교전 중 보스 50% 전진
+    if (keepsAdvancing(e) && e.blocker && !e.blocker.dead) slowMul = Math.min(slowMul, 0.5); // 교전 중 보스/공성차 50% 전진
     e.progress += e.speed * slowMul * dt;
     const p = pointAt(e.path, e.progress);
     e.x = p.x; e.y = p.y;
@@ -548,12 +592,12 @@ function updateEnemies(dt) {
 function updateBossSkill(e, dt) {
   e.skillCd -= dt;
   if (e.skillCd > 0) return;
-  e.skillCd = 8;
+  e.skillCd = 20; // 적 영웅은 20초마다 특수기술 발동
   const sk = BOSS_TYPES[e.typeId].skill;
   addFloater(e.x, e.y - 26, sk.name + '!', '#ff9f43', 16);
   switch (e.typeId) {
-    case 'zhangJiao': { // 주변 아군 번개
-      for (const ally of allAllies()) if (dist(ally, e) < 140) { ally.hp -= 35; addEffect('bolt', ally.x, ally.y, 0.3); if (ally.hp <= 0) killAlly(ally); }
+    case 'zhangJiao': { // 태평요술: 주변 아군에 번개 + 독 살포
+      for (const ally of allAllies()) if (dist(ally, e) < 140) { ally.hp -= 22; ally.poison = 4; addEffect('bolt', ally.x, ally.y, 0.3); if (ally.hp <= 0) killAlly(ally); }
       break; }
     case 'huaXiong': case 'xiahouYuan': { // 강타
       if (e.blocker && !e.blocker.dead) { e.blocker.hp -= 80; addEffect('slash', e.blocker.x, e.blocker.y, 0.3); if (e.blocker.hp <= 0) killAlly(e.blocker); }
@@ -643,6 +687,40 @@ function resolveAbility(key, x, y) {
   addFloater(x, y - 40, a.name + '!', '#ffe9a8', 16);
   updateHUD();
   return true;
+}
+
+function updateFort(dt) {
+  if (!G.forts) return;
+  for (const f of G.forts) {
+    const lv = FORT_LEVELS[f.level];
+    f.cooldown -= dt;
+    if (f.cooldown > 0) continue;
+    let best = null;
+    for (const e of G.enemies) { if (e.dead) continue; if (dist(f, e) <= lv.range && (!best || e.progress > best.progress)) best = e; }
+    if (best) {
+      f.cooldown = lv.rate * (G.moraleT > 0 ? 0.7 : 1);
+      G.projectiles.push({ x: f.x, y: f.y - 6, sx: f.x, sy: f.y - 6, target: best, speed: 430, lvDef: { proj: 'arrow', dmg: lv.dmg, magic: false } });
+      AudioSys.play('arrow', 78);
+    }
+  }
+}
+
+function drawForts() {
+  if (!G.forts) return;
+  for (let i = 0; i < G.forts.length; i++) {
+    const f = G.forts[i], lv = FORT_LEVELS[f.level];
+    const selected = G.sel && G.sel.kind === 'fort' && G.sel.i === i;
+    if (selected) {
+      ctx.beginPath(); ctx.arc(f.x, f.y, lv.range, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(120,180,255,0.08)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(150,200,255,0.55)'; ctx.lineWidth = 1.5; ctx.setLineDash([6, 5]); ctx.stroke(); ctx.setLineDash([]);
+    }
+    // 레벨 별 표식
+    ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+    const stars = '★'.repeat(f.level + 1);
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3;
+    ctx.strokeText(stars, f.x, f.y - 60); ctx.fillStyle = '#ffd75e'; ctx.fillText(stars, f.x, f.y - 60);
+  }
 }
 
 function updateTowers(dt) {
@@ -796,10 +874,16 @@ function updateHero(dt) {
   updateUltBtn();
 }
 
-function castUlt() {
+function castUlt(aimX, aimY) {
   const h = G.hero;
   if (!h || h.dead || h.ultCd > 0) return;
   const u = h.def.ult;
+  // 조준형 필살기(조운 돌격): '준비' 후 맵을 클릭한 방향으로 발동
+  if (u.type === 'charge' && aimX == null) {
+    G.aiming = (G.aiming === 'ult') ? null : 'ult';
+    updateUltBtn();
+    return;
+  }
   h.ultCd = u.cd * (h.ultCdMul || 1);
   h.attackT = 0.55;
   addFloater(h.x, h.y - 30, u.name + '!!', '#ffd700', 20);
@@ -816,10 +900,15 @@ function castUlt() {
       for (const e of G.enemies) if (!e.dead) dealDamage(e, ultDmg, { magic: true, stun: u.stun });
       break;
     case 'charge': {
-      // 진행방향: 가장 가까운 적 무리 쪽으로
-      let tgt = null;
-      for (const e of G.enemies) if (!e.dead && (!tgt || dist(h, e) < dist(h, tgt))) tgt = e;
-      const ang = tgt ? Math.atan2(tgt.y - h.y, tgt.x - h.x) : 0;
+      // 클릭한 방향으로 돌격 (조준 없으면 가장 가까운 적 방향)
+      let ang;
+      if (aimX != null) {
+        ang = Math.atan2(aimY - h.y, aimX - h.x);
+      } else {
+        let tgt = null;
+        for (const e of G.enemies) if (!e.dead && (!tgt || dist(h, e) < dist(h, tgt))) tgt = e;
+        ang = tgt ? Math.atan2(tgt.y - h.y, tgt.x - h.x) : 0;
+      }
       const ex = h.x + Math.cos(ang) * u.length, ey = h.y + Math.sin(ang) * u.length;
       addEffect('chargeLine', h.x, h.y, 0.5, { ex, ey });
       for (const e of G.enemies) {
@@ -853,6 +942,19 @@ function updateProjectiles(dt) {
     if (tgt.dead) { p.hit = true; continue; }
     const d = dist(p, tgt);
     const step = p.speed * dt;
+    // 적 원거리 투사체: 아군에게 명중 시 피해
+    if (p.enemyShot) {
+      if (d <= step + 6) {
+        p.hit = true;
+        tgt.hp -= p.dmg;
+        addEffect(p.magic ? 'bolt' : 'flame', tgt.x, tgt.y, 0.22);
+        if (tgt.hp <= 0) killAlly(tgt);
+      } else {
+        p.x += (tgt.x - p.x) / d * step;
+        p.y += (tgt.y - p.y) / d * step;
+      }
+      continue;
+    }
     if (d <= step + 6) {
       p.hit = true;
       const lv = p.lvDef;
@@ -938,6 +1040,7 @@ function draw() {
   if (G.shake > 0) ctx.translate(rand(-4, 4) * G.shake, rand(-4, 4) * G.shake);
   ctx.drawImage(Sprites.terrain(G.stage, pathSamples()), 0, 0);
   drawSpots();
+  drawForts();
   drawTowers();
   drawUnits();
   drawProjectiles();
@@ -970,6 +1073,26 @@ function drawCombo() {
 function drawAiming() {
   if (!G.aiming) return;
   const x = G.aimX, y = G.aimY;
+  // 조준형 필살기(조운 돌격): 영웅→조준점 방향 화살표
+  if (G.aiming === 'ult') {
+    const h = G.hero; if (!h) return;
+    const u = h.def.ult;
+    const ang = Math.atan2(y - h.y, x - h.x);
+    const len = u.length || 260;
+    const ex = h.x + Math.cos(ang) * len, ey = h.y + Math.sin(ang) * len;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(120,180,255,0.85)'; ctx.lineWidth = 4; ctx.setLineDash([10, 7]);
+    ctx.beginPath(); ctx.moveTo(h.x, h.y); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.setLineDash([]);
+    // 화살촉
+    ctx.translate(ex, ey); ctx.rotate(ang);
+    ctx.fillStyle = 'rgba(150,200,255,0.95)';
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-16, -8); ctx.lineTo(-16, 8); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#cfe6ff';
+    ctx.fillText('돌격 방향 클릭', x, y - 14);
+    return;
+  }
   const a = ABILITIES[G.aiming];
   ctx.save();
   if (G.aiming === 'fire') {
@@ -1068,6 +1191,8 @@ const BOSS_ILLUST_HUE = {
   xiahouYuan: 'hue-rotate(-18deg) saturate(1.45)',
 };
 const TOWER_ILLUST = { archer: 'tower_archer', barracks: 'tower_barracks', catapult: 'tower_catapult', fire: 'tower_fire' };
+// 기마/대형 유닛은 탈것 포함이라 더 크게 그려 보병과 비슷한 체감 크기를 맞춘다
+const UNIT_SCALE = { cavalry: 1.34, tigerGuard: 1.34, siege: 1.24 };
 /* 영웅별 무기 궤적 이펙트 (공격 시) */
 const HERO_STRIKE = {
   liubei:     { kind: 'dualArc', color: '#ffe27a', color2: '#7adf8a' }, // 쌍고검 교차 베기
@@ -1170,7 +1295,8 @@ function drawUnits() {
       const map = e.isBoss ? ['unit_general', BOSS_ILLUST_HUE[e.typeId]] : UNIT_ILLUST[e.typeId];
       const atkImg = (attacking && map) ? SpriteImages.variant(map[0] + '_atk', map[1]) : null;
       const uImg = atkImg || (map ? SpriteImages.variant(map[0], map[1]) : null);
-      const hgt = uImg ? (e.isBoss ? 82 : 52) : (e.isBoss ? 62 : 42);
+      const baseH = e.isBoss ? 82 : Math.round(52 * (UNIT_SCALE[e.typeId] || 1));
+      const hgt = uImg ? baseH : (e.isBoss ? 62 : 42);
       shadow(e.x, e.y + 11, e.isBoss ? 23 : 16);
       if (e.shielded) {
         ctx.beginPath(); ctx.arc(e.x, e.y - 10, 26, 0, Math.PI * 2);
@@ -1301,6 +1427,21 @@ function drawUnits() {
 function drawProjectiles() {
   for (const p of G.projectiles) {
     const tgt = p.target;
+    if (p.enemyShot) {
+      const a = Math.atan2(tgt.y - p.y, tgt.x - p.x);
+      if (p.magic) {
+        ctx.fillStyle = 'rgba(160,120,255,0.4)';
+        ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#c9a6ff';
+        ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(a);
+        ctx.fillStyle = '#3a2c1c'; ctx.fillRect(-7, -1, 11, 2);
+        ctx.fillStyle = '#e0552f'; ctx.fillRect(4, -1.5, 4, 3);
+        ctx.restore();
+      }
+      continue;
+    }
     if (p.lvDef.proj === 'arrow') {
       const a = Math.atan2(tgt.y - p.y, tgt.x - p.x);
       ctx.save();
@@ -1707,6 +1848,33 @@ function renderSelPanel() {
     acts.appendChild(sell);
     panel.appendChild(acts);
 
+  } else if (sel.kind === 'fort') {
+    const f = sel.ref, lv = FORT_LEVELS[f.level];
+    const head = document.createElement('div'); head.className = 'sp-head';
+    head.innerHTML = `<span class="sp-title">${lv.name} <span class="sp-star">${'★'.repeat(f.level + 1)}</span></span><span class="sp-hint">본진을 지키는 활 공격 · 업그레이드 시 하트 +1</span>`;
+    panel.appendChild(head);
+    const stats = document.createElement('div'); stats.className = 'sp-stats';
+    stats.innerHTML = [`⚔ ${lv.dmg[0]}~${lv.dmg[1]}`, `↔ ${lv.range}`, `⏱ ${(1 / lv.rate).toFixed(1)}/s`, `❤ ${G.lives}`]
+      .map(c => `<span class="sp-chip">${c}</span>`).join('');
+    panel.appendChild(stats);
+    if (f.level < FORT_LEVELS.length - 1) {
+      const next = FORT_LEVELS[f.level + 1];
+      const acts = document.createElement('div'); acts.className = 'sp-acts';
+      const up = document.createElement('button'); up.className = 'sp-act up';
+      up.innerHTML = `⬆ ${next.name} · 공격력·사거리↑ +❤ <b>💰${next.cost}</b>`;
+      up.onclick = (e) => {
+        e.stopPropagation();
+        if (G.gold < next.cost) return;
+        G.gold -= next.cost; f.level++; G.lives++; // 업그레이드 시 하트 +1
+        addFloater(f.x, f.y - 40, '성채 강화! +❤', '#7bed9f', 16);
+        AudioSys.play('build'); updateHUD();
+        selectAt('fort', sel.i, f);
+      };
+      G.selUI.costBtns.push({ el: up, cost: next.cost });
+      acts.appendChild(up);
+      panel.appendChild(acts);
+    }
+
   } else {
     // 유닛/영웅 스펙
     const u = sel.ref;
@@ -1758,7 +1926,8 @@ canvas.addEventListener('click', (ev) => {
 
   // 보급기 조준 모드: 지점 클릭 시 발동
   if (G.aiming) {
-    resolveAbility(G.aiming, clamp(x, 0, W), clamp(y, 0, H));
+    if (G.aiming === 'ult') castUlt(clamp(x, 0, W), clamp(y, 0, H));
+    else resolveAbility(G.aiming, clamp(x, 0, W), clamp(y, 0, H));
     G.aiming = null;
     return;
   }
@@ -1794,6 +1963,11 @@ canvas.addEventListener('click', (ev) => {
   for (const rr of G.reinf) if (!rr.dead) allies.push(rr);
   for (const s of allies) { const d = Math.hypot(s.x - x, s.y - y); if (d < bad) { bad = d; ba = s; } }
   if (ba) { selectAt('soldier', -1, ba); return; }
+  // 4.5) 본진 성채 클릭 → 업그레이드 패널
+  if (G.forts) for (let i = 0; i < G.forts.length; i++) {
+    const f = G.forts[i];
+    if (Math.hypot(f.x - x, f.y - y) < 56) { selectAt('fort', i, f); return; }
+  }
 
   // 5) 빈 곳: 막사 선택 중이면 집결지 이동, 아니면 영웅 이동
   if (G.sel && G.sel.kind === 'tower') {
@@ -1836,7 +2010,10 @@ for (const key of Object.keys(ABILITIES)) {
   const el = $('#abil-' + key);
   if (el) {
     el.title = `${ABILITIES[key].name} — ${ABILITIES[key].desc}`;
-    el.querySelector('.ab-ic').textContent = ABILITIES[key].icon;
+    // 아기자기 아이콘 이미지(없으면 이모지 폴백)
+    const icEl = el.querySelector('.ab-ic');
+    const imgName = key === 'fire' ? 'ability_fire' : 'ability_reinf';
+    icEl.innerHTML = `<img src="assets/img/${imgName}.png" alt="" style="width:100%;height:100%;object-fit:contain" onerror="this.replaceWith(document.createTextNode('${ABILITIES[key].icon}'))">`;
     el.onclick = (e) => { e.stopPropagation(); toggleAiming(key); };
   }
 }
